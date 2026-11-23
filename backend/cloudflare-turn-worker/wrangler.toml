@@ -1,0 +1,9 @@
+name = "lingosphere-turn-credentials"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+CLOUDFLARE_TURN_KEY_ID = "YOUR_CLOUDFLARE_TURN_KEY_ID"
+
+# Store CLOUDFLARE_TURN_API_TOKEN as an encrypted secret (never in plain text):
+# npx wrangler secret put CLOUDFLARE_TURN_API_TOKEN

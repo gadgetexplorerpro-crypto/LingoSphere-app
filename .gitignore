@@ -1,0 +1,62 @@
+# Build outputs & binaries (prevents >100 MB push failures)
+/build
+/build/
+app/build
+app/build/
+android/build
+android/build/
+.build-outputs
+.build-outputs/
+/captures
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Node / Web / Functions dependencies & build folders
+node_modules
+node_modules/
+functions/node_modules
+functions/node_modules/
+dist
+dist/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+local.properties
+/local.properties
+debug.keystore
+*.jks
+*.keystore
+
+# Gradle, Kotlin & IDE caches
+*.iml
+.gradle
+.gradle/
+.kotlin
+.kotlin/
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.externalNativeBuild
+.cxx
+
+# Platform & OS folders
+.aistudio
+.aistudio/
+/public/assets/aistudio
+.DS_Store
+*-debug.log
+firebase-debug.log
+firebase-debug.*.log
+
+# Exclude GitHub workflow YAML files from automated GitHub App pushes
+.github/
+.github/workflows/
+*.yml
+*.yaml

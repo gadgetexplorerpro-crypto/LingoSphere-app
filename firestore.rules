@@ -1,0 +1,1408 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBoundedStringList(lst, maxSize) {
+      return lst is list && lst.size() <= maxSize && (lst.size() == 0 || lst[0] is string);
+    }
+
+    // --- Entity Validation Functions ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.nativeLanguageCode is string && data.nativeLanguageCode.size() >= 2 && data.nativeLanguageCode.size() <= 10 &&
+             data.targetLanguageCode is string && data.targetLanguageCode.size() >= 2 && data.targetLanguageCode.size() <= 10 &&
+             isBoundedStringList(data.activeLanguages, 20) &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced']) &&
+             data.xpPoints is int && data.xpPoints >= 0 &&
+             data.level is int && data.level >= 1 &&
+             data.currentStreak is int && data.currentStreak >= 0 &&
+             data.longestStreak is int && data.longestStreak >= 0 &&
+             data.lastActiveDate is string && data.lastActiveDate.size() <= 20 &&
+             data.dailyGoalMinutes is int && data.dailyGoalMinutes >= 1 && data.dailyGoalMinutes <= 180 &&
+             data.dailyAiSpeakingCount is int && data.dailyAiSpeakingCount >= 0 &&
+             data.dailyAiResetDate is string && data.dailyAiResetDate.size() <= 20 &&
+             (data.subscriptionTier in ['free', 'premium_monthly', 'premium_pro', 'premium_yearly']) &&
+             (!('purchaseToken' in data) || (data.purchaseToken is string && data.purchaseToken.size() <= 500)) &&
+             (!('isFreeTrial' in data) || data.isFreeTrial is bool) &&
+             (!('hasUsedFreeTrial' in data) || data.hasUsedFreeTrial is bool) &&
+             (!('subscriptionAutoRenewing' in data) || data.subscriptionAutoRenewing is bool) &&
+             (!('subscriptionExpiryEpochMs' in data) || (data.subscriptionExpiryEpochMs is int && data.subscriptionExpiryEpochMs >= 0)) &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 150000)) &&
+             (!('completedLessonIds' in data) || isBoundedStringList(data.completedLessonIds, 200)) &&
+             (!('achievements' in data) || isBoundedStringList(data.achievements, 50)) &&
+             (!('languageLevels' in data) || data.languageLevels is map) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUiPreference(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.enabled is bool &&
+             (data.snapSide in ['left', 'right']) &&
+             data.verticalFraction is number && data.verticalFraction >= 0 && data.verticalFraction <= 1 &&
+             (!('hasSeenDragHint' in data) || data.hasSeenDragHint is bool) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isBoundedIntList(lst, maxSize) {
+      return lst is list && lst.size() <= maxSize && (lst.size() == 0 || lst[0] is int);
+    }
+
+    function isValidBookReadingProgress(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+             (!('bookTitle' in data) || (data.bookTitle is string && data.bookTitle.size() <= 240)) &&
+             data.chapterIndex is int && data.chapterIndex >= 0 && data.chapterIndex <= 5000 &&
+             data.scrollOffset is int && data.scrollOffset >= 0 && data.scrollOffset <= 1000000 &&
+             data.pageIndex is int && data.pageIndex >= 0 && data.pageIndex <= 50000 &&
+             data.progressPercent is number && data.progressPercent >= 0 && data.progressPercent <= 1 &&
+             (!('readingTheme' in data) || (data.readingTheme in ['LIGHT', 'SEPIA', 'DARK'])) &&
+             (!('fontSizeSp' in data) || (data.fontSizeSp is number && data.fontSizeSp >= 12 && data.fontSizeSp <= 32)) &&
+             (!('isPageMode' in data) || data.isPageMode is bool) &&
+             (!('completedChapters' in data) || isBoundedIntList(data.completedChapters, 1000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBookListeningProgress(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+             (!('bookTitle' in data) || (data.bookTitle is string && data.bookTitle.size() <= 240)) &&
+             data.chapterIndex is int && data.chapterIndex >= 0 && data.chapterIndex <= 5000 &&
+             data.sentenceIndex is int && data.sentenceIndex >= 0 && data.sentenceIndex <= 1000000 &&
+             data.positionMs is int && data.positionMs >= 0 && data.positionMs <= 86400000 &&
+             data.progressPercent is number && data.progressPercent >= 0 && data.progressPercent <= 1 &&
+             (!('preferredEditionId' in data) || (data.preferredEditionId is string && data.preferredEditionId.size() <= 64)) &&
+             (!('autoPlayNextChapter' in data) || data.autoPlayNextChapter is bool) &&
+             (!('isCompleted' in data) || data.isCompleted is bool) &&
+             (!('completedChapters' in data) || isBoundedIntList(data.completedChapters, 1000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidBookBookmark(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.bookId is string && data.bookId.size() >= 1 && data.bookId.size() <= 128 &&
+             data.bookTitle is string && data.bookTitle.size() >= 1 && data.bookTitle.size() <= 240 &&
+             data.chapterIndex is int && data.chapterIndex >= 0 && data.chapterIndex <= 5000 &&
+             data.chapterTitle is string && data.chapterTitle.size() <= 240 &&
+             data.sentenceIndex is int && data.sentenceIndex >= 0 && data.sentenceIndex <= 1000000 &&
+             data.positionMs is int && data.positionMs >= 0 && data.positionMs <= 86400000 &&
+             data.snippetText is string && data.snippetText.size() <= 600 &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidExploreSession(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.sessionId is string && data.sessionId.size() >= 1 && data.sessionId.size() <= 128 &&
+             (data.featureType in [
+               'living_immersion', 'camera_lens', 'emergency_pack',
+               'ai_debate', 'conversation_repair', 'explain_three_ways',
+               'conversation_detective', 'mistake_recovery'
+             ]) &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 240 &&
+             data.summary is string && data.summary.size() <= 4000 &&
+             (!('cefrLevel' in data) || (data.cefrLevel is string && data.cefrLevel.size() <= 32)) &&
+             (!('turnsCount' in data) || (data.turnsCount is int && data.turnsCount >= 0 && data.turnsCount <= 500)) &&
+             (!('scorePercent' in data) || (data.scorePercent is int && data.scorePercent >= 0 && data.scorePercent <= 100)) &&
+             (!('payloadJson' in data) || (data.payloadJson is string && data.payloadJson.size() <= 40000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMistakeRecord(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.mistakeId is string && data.mistakeId.size() >= 1 && data.mistakeId.size() <= 128 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             data.languageName is string && data.languageName.size() >= 1 && data.languageName.size() <= 60 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 80 &&
+             data.originalResponse is string && data.originalResponse.size() >= 1 && data.originalResponse.size() <= 1000 &&
+             data.correctedVersion is string && data.correctedVersion.size() >= 1 && data.correctedVersion.size() <= 1000 &&
+             data.explanation is string && data.explanation.size() <= 1500 &&
+             data.activitySource is string && data.activitySource.size() >= 1 && data.activitySource.size() <= 80 &&
+             (data.reviewStatus in ['pending', 'practicing', 'mastered']) &&
+             data.occurrenceCount is int && data.occurrenceCount >= 1 && data.occurrenceCount <= 500 &&
+             data.masteryScore is int && data.masteryScore >= 0 && data.masteryScore <= 100 &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidLessonProgress(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.lessonId is string && data.lessonId.size() >= 1 && data.lessonId.size() <= 100 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             (data.category in ['Vocabulary', 'Grammar', 'Listening', 'Reading', 'Writing', 'Quiz']) &&
+             data.scorePercent is int && data.scorePercent >= 0 && data.scorePercent <= 100 &&
+             data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 500 &&
+             data.completed is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFlashcardProgress(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.wordId is string && data.wordId.size() >= 1 && data.wordId.size() <= 100 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             data.frontText is string && data.frontText.size() >= 1 && data.frontText.size() <= 200 &&
+             data.backText is string && data.backText.size() >= 1 && data.backText.size() <= 200 &&
+             data.pronunciation is string && data.pronunciation.size() <= 200 &&
+             data.boxLevel is int && data.boxLevel >= 1 && data.boxLevel <= 5 &&
+             data.nextReviewEpochDay is int && data.nextReviewEpochDay >= 0 &&
+             data.mastered is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSpeakingSession(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             (data.mode in ['Tutor', 'Roleplay']) &&
+             data.scenarioTitle is string && data.scenarioTitle.size() >= 1 && data.scenarioTitle.size() <= 120 &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced']) &&
+             data.turnsCount is int && data.turnsCount >= 1 && data.turnsCount <= 500 &&
+             data.fluencyScore is int && data.fluencyScore >= 0 && data.fluencyScore <= 100 &&
+             data.grammarFeedbackSummary is string && data.grammarFeedbackSummary.size() <= 2000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCommunityProfile(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.country is string && data.country.size() >= 0 && data.country.size() <= 60 &&
+             data.countryFlag is string && data.countryFlag.size() <= 16 &&
+             data.bio is string && data.bio.size() <= 400 &&
+             isBoundedStringList(data.interests, 15) &&
+             data.nativeLanguageCode is string && data.nativeLanguageCode.size() >= 2 && data.nativeLanguageCode.size() <= 10 &&
+             data.targetLanguageCode is string && data.targetLanguageCode.size() >= 2 && data.targetLanguageCode.size() <= 10 &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced', 'Native', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2']) &&
+             data.xpPoints is int && data.xpPoints >= 0 &&
+             data.level is int && data.level >= 1 &&
+             data.currentStreak is int && data.currentStreak >= 0 &&
+             data.isOnline is bool &&
+             (!('presenceState' in data) || (data.presenceState in ['online', 'away', 'offline', 'in_call', 'available_to_match', 'busy'])) &&
+             (!('lastSeenEpochMs' in data) || (data.lastSeenEpochMs is int && data.lastSeenEpochMs >= 0)) &&
+             (!('lastHeartbeatEpochMs' in data) || (data.lastHeartbeatEpochMs is int && data.lastHeartbeatEpochMs >= 0)) &&
+             (!('showLastSeen' in data) || data.showLastSeen is bool) &&
+             data.allowCalls is bool &&
+             (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 150000)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFriendRequest(data) {
+      return data.senderId is string && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.receiverId is string && data.receiverId.size() <= 128 &&
+             data.receiverName is string && data.receiverName.size() >= 1 && data.receiverName.size() <= 80 &&
+             (data.status in ['pending', 'accepted', 'declined']) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidDirectChatMessage(data) {
+      return data.chatRoomId is string && data.chatRoomId.size() >= 1 && data.chatRoomId.size() <= 260 &&
+             data.senderId is string && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.receiverId is string && data.receiverId.size() <= 128 &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 2000 &&
+             (!('translatedText' in data) || data.translatedText == null || (data.translatedText is string && data.translatedText.size() <= 2000)) &&
+             (!('messageType' in data) || (data.messageType in ['text', 'voice', 'schedule_invite'])) &&
+             (!('deliveryStatus' in data) || (data.deliveryStatus in ['sent', 'delivered', 'read'])) &&
+             (!('audioDataBase64' in data) || (data.audioDataBase64 is string && data.audioDataBase64.size() <= 450000)) &&
+             (!('audioDurationMs' in data) || (data.audioDurationMs is int && data.audioDurationMs >= 0 && data.audioDurationMs <= 600000)) &&
+             (!('audioMimeType' in data) || (data.audioMimeType is string && data.audioMimeType.size() <= 64)) &&
+             (!('audioWaveform' in data) || (data.audioWaveform is list && data.audioWaveform.size() <= 120)) &&
+             (!('replyToMessageId' in data) || (data.replyToMessageId is string && data.replyToMessageId.size() <= 128)) &&
+             (!('replyToSenderName' in data) || (data.replyToSenderName is string && data.replyToSenderName.size() <= 80)) &&
+             (!('replyToText' in data) || (data.replyToText is string && data.replyToText.size() <= 500)) &&
+             (!('transcriptText' in data) || data.transcriptText == null || (data.transcriptText is string && data.transcriptText.size() <= 2000)) &&
+             (!('grammarCorrectionText' in data) || data.grammarCorrectionText == null || (data.grammarCorrectionText is string && data.grammarCorrectionText.size() <= 2000)) &&
+             (!('editedAtEpochMs' in data) || (data.editedAtEpochMs is int && data.editedAtEpochMs >= 0)) &&
+             (!('readAtEpochMs' in data) || (data.readAtEpochMs is int && data.readAtEpochMs >= 0)) &&
+             (!('scheduleTopic' in data) || (data.scheduleTopic is string && data.scheduleTopic.size() <= 200)) &&
+             (!('scheduleDateLabel' in data) || (data.scheduleDateLabel is string && data.scheduleDateLabel.size() <= 120)) &&
+             (!('scheduleTimeLabel' in data) || (data.scheduleTimeLabel is string && data.scheduleTimeLabel.size() <= 120)) &&
+             (!('scheduleTimezone' in data) || (data.scheduleTimezone is string && data.scheduleTimezone.size() <= 80)) &&
+             (!('scheduleStatus' in data) || (data.scheduleStatus in ['pending', 'accepted', 'declined', 'rescheduled'])) &&
+             (!('scheduleProposedText' in data) || (data.scheduleProposedText is string && data.scheduleProposedText.size() <= 240)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidCallRoom(data) {
+      return data.roomId is string && data.roomId.size() >= 1 && data.roomId.size() <= 128 &&
+             data.callerId is string && data.callerId.size() <= 128 &&
+             data.callerName is string && data.callerName.size() >= 1 && data.callerName.size() <= 80 &&
+             (!('callerNativeLang' in data) || (data.callerNativeLang is string && data.callerNativeLang.size() <= 10)) &&
+             (!('callerLearningLang' in data) || (data.callerLearningLang is string && data.callerLearningLang.size() <= 10)) &&
+             data.calleeId is string && data.calleeId.size() <= 128 &&
+             data.calleeName is string && data.calleeName.size() <= 80 &&
+             (!('calleeNativeLang' in data) || (data.calleeNativeLang is string && data.calleeNativeLang.size() <= 10)) &&
+             (!('calleeLearningLang' in data) || (data.calleeLearningLang is string && data.calleeLearningLang.size() <= 10)) &&
+             (data.callType in ['voice', 'video']) &&
+             (data.matchMode in ['direct', 'random', 'country', 'interest', 'quick', 'language', 'speaking_room']) &&
+             data.targetLanguageCode is string && data.targetLanguageCode.size() >= 2 && data.targetLanguageCode.size() <= 10 &&
+             (data.status in ['waiting', 'ringing', 'accepted', 'connected', 'ended', 'rejected', 'declined', 'cancelled', 'missed', 'failed', 'busy', 'closed']) &&
+             (!('lastSignalingEvent' in data) || (data.lastSignalingEvent is string && data.lastSignalingEvent.size() <= 64)) &&
+             data.isCallerMuted is bool &&
+             data.isCalleeMuted is bool &&
+             data.isVideoEnabled is bool &&
+             (!('isCallerVideoEnabled' in data) || data.isCallerVideoEnabled is bool) &&
+             (!('isCalleeVideoEnabled' in data) || data.isCalleeVideoEnabled is bool) &&
+             (!('conversationTopic' in data) || (data.conversationTopic is string && data.conversationTopic.size() <= 300)) &&
+             (!('roomTitle' in data) || (data.roomTitle is string && data.roomTitle.size() <= 200)) &&
+             (!('isPublic' in data) || data.isPublic is bool) &&
+             (!('participantLimit' in data) || (data.participantLimit is int && data.participantLimit >= 1 && data.participantLimit <= 100)) &&
+             (!('participantIds' in data) || isBoundedStringList(data.participantIds, 100)) &&
+             (!('participantNames' in data) || isBoundedStringList(data.participantNames, 100)) &&
+             (!('mutedParticipantIds' in data) || isBoundedStringList(data.mutedParticipantIds, 100)) &&
+             (!('handRaisedParticipantIds' in data) || isBoundedStringList(data.handRaisedParticipantIds, 100)) &&
+             (!('sdpOffer' in data) || data.sdpOffer == null || (data.sdpOffer is string && data.sdpOffer.size() <= 50000)) &&
+             (!('sdpAnswer' in data) || data.sdpAnswer == null || (data.sdpAnswer is string && data.sdpAnswer.size() <= 50000)) &&
+             (!('callerIceCandidates' in data) || isBoundedStringList(data.callerIceCandidates, 150)) &&
+             (!('calleeIceCandidates' in data) || isBoundedStringList(data.calleeIceCandidates, 150)) &&
+             (!('connectionState' in data) || (data.connectionState in ['new', 'checking', 'connecting', 'connected', 'completed', 'reconnecting', 'disconnected', 'failed', 'closed'])) &&
+             (!('connectedAtEpochMs' in data) || (data.connectedAtEpochMs is int && data.connectedAtEpochMs >= 0)) &&
+             (!('endedAtEpochMs' in data) || (data.endedAtEpochMs is int && data.endedAtEpochMs >= 0)) &&
+             (!('endedBy' in data) || data.endedBy == null || (data.endedBy is string && data.endedBy.size() <= 128)) &&
+             (!('durationSeconds' in data) || (data.durationSeconds is int && data.durationSeconds >= 0)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCallHistoryRecord(data) {
+      return data.callId is string && data.callId.size() >= 1 && data.callId.size() <= 128 &&
+             data.callerId is string && data.callerId.size() >= 1 && data.callerId.size() <= 128 &&
+             data.callerName is string && data.callerName.size() <= 80 &&
+             data.receiverId is string && data.receiverId.size() >= 1 && data.receiverId.size() <= 128 &&
+             data.receiverName is string && data.receiverName.size() <= 80 &&
+             (data.callType in ['voice', 'video']) &&
+             data.targetLanguageCode is string && data.targetLanguageCode.size() >= 2 && data.targetLanguageCode.size() <= 10 &&
+             data.startTimeEpochMs is int && data.startTimeEpochMs >= 0 &&
+             data.endTimeEpochMs is int && data.endTimeEpochMs >= 0 &&
+             data.durationSeconds is int && data.durationSeconds >= 0 &&
+             (data.status in ['completed', 'missed', 'rejected', 'cancelled', 'failed']) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidUserReport(data) {
+      return data.reporterId is string && data.reporterId.size() <= 128 &&
+             data.targetUserId is string && data.targetUserId.size() <= 128 &&
+             data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 100 &&
+             data.details is string && data.details.size() <= 1000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidUserBlock(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.blockedUserId is string && data.blockedUserId.size() <= 128 &&
+             data.blockedUserName is string && data.blockedUserName.size() <= 80 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidUserNotification(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 500 &&
+             data.type is string && data.type.size() <= 40 &&
+             data.isRead is bool &&
+             (!('targetRoute' in data) || (data.targetRoute is string && data.targetRoute.size() <= 80)) &&
+             (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128)) &&
+             (!('senderId' in data) || (data.senderId is string && data.senderId.size() <= 128)) &&
+             (!('senderName' in data) || (data.senderName is string && data.senderName.size() <= 80)) &&
+             (!('word' in data) || (data.word is string && data.word.size() <= 80)) &&
+             (!('meaning' in data) || (data.meaning is string && data.meaning.size() <= 300)) &&
+             (!('pronunciation' in data) || (data.pronunciation is string && data.pronunciation.size() <= 120)) &&
+             (!('exampleSentence' in data) || (data.exampleSentence is string && data.exampleSentence.size() <= 400)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidSavedVideo(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.videoId is string && data.videoId.size() >= 1 && data.videoId.size() <= 60 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+             data.channelTitle is string && data.channelTitle.size() >= 1 && data.channelTitle.size() <= 150 &&
+             data.thumbnailUrl is string && data.thumbnailUrl.size() <= 500 &&
+             data.durationText is string && data.durationText.size() <= 40 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced']) &&
+             data.topicCategory is string && data.topicCategory.size() <= 80 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.captionSummary is string && data.captionSummary.size() <= 4000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidVideoPlaylist(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.playlistId is string && data.playlistId.size() >= 1 && data.playlistId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.description is string && data.description.size() <= 300 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced', 'All']) &&
+             isBoundedStringList(data.videoIds, 100) &&
+             isBoundedStringList(data.videoTitles, 100) &&
+             isBoundedStringList(data.videoThumbnails, 100) &&
+             isBoundedStringList(data.videoChannels, 100) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidVideoWatchHistory(data) {
+      return data.userId is string && data.userId.size() <= 128 &&
+             data.videoId is string && data.videoId.size() >= 1 && data.videoId.size() <= 60 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+             data.channelTitle is string && data.channelTitle.size() >= 1 && data.channelTitle.size() <= 150 &&
+             data.thumbnailUrl is string && data.thumbnailUrl.size() <= 500 &&
+             data.durationText is string && data.durationText.size() <= 40 &&
+             data.languageCode is string && data.languageCode.size() >= 2 && data.languageCode.size() <= 10 &&
+             (data.proficiencyLevel in ['Beginner', 'Intermediate', 'Advanced']) &&
+             data.watchedSeconds is int && data.watchedSeconds >= 0 &&
+             data.completedQuiz is bool &&
+             data.quizScorePercent is int && data.quizScorePercent >= 0 && data.quizScorePercent <= 100 &&
+             data.xpEarned is int && data.xpEarned >= 0 && data.xpEarned <= 500 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidReferralCodeId(code) {
+      return code is string && code.size() >= 6 && code.size() <= 16 && code.matches('^[A-Z0-9]+$');
+    }
+
+    function isValidReferralCodeDoc(data) {
+      return isValidReferralCodeId(data.code) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.ownerDisplayName is string && data.ownerDisplayName.size() >= 1 && data.ownerDisplayName.size() <= 80 &&
+             (!('ownerTargetLanguage' in data) || (data.ownerTargetLanguage is string && data.ownerTargetLanguage.size() <= 10)) &&
+             (!('ownerNativeLanguage' in data) || (data.ownerNativeLanguage is string && data.ownerNativeLanguage.size() <= 10)) &&
+             data.isActive is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidReferralSummary(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             isValidReferralCodeId(data.referralCode) &&
+             data.successfulReferralsCount is int && data.successfulReferralsCount >= 0 &&
+             data.syncedReferralsCount is int && data.syncedReferralsCount >= 0 &&
+             data.syncedReferralsCount <= data.successfulReferralsCount &&
+             data.pendingInvitationsCount is int && data.pendingInvitationsCount >= 0 && data.pendingInvitationsCount <= 10000 &&
+             data.totalXpEarnedFromReferrals is int && data.totalXpEarnedFromReferrals >= 0 &&
+             isBoundedStringList(data.unlockedBadges, 20) &&
+             data.bonusSpeakingCredits is int && data.bonusSpeakingCredits >= 0 && data.bonusSpeakingCredits <= 500 &&
+             (!('referredByCode' in data) || data.referredByCode == null || (data.referredByCode is string && data.referredByCode.size() <= 16)) &&
+             (!('referredByUid' in data) || data.referredByUid == null || (data.referredByUid is string && data.referredByUid.size() <= 128)) &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidReferralRecord(data) {
+      return data.referralId is string && data.referralId.size() >= 1 && data.referralId.size() <= 128 &&
+             data.inviterUid is string && data.inviterUid.size() >= 1 && data.inviterUid.size() <= 128 &&
+             data.inviterName is string && data.inviterName.size() >= 1 && data.inviterName.size() <= 80 &&
+             data.referredUid is string && data.referredUid.size() >= 1 && data.referredUid.size() <= 128 &&
+             data.referredName is string && data.referredName.size() >= 1 && data.referredName.size() <= 80 &&
+             isValidReferralCodeId(data.referralCode) &&
+             (data.status in ['pending', 'completed', 'rejected']) &&
+             data.inviterXpAwarded is int && data.inviterXpAwarded >= 0 && data.inviterXpAwarded <= 500 &&
+             data.referredXpAwarded is int && data.referredXpAwarded >= 0 && data.referredXpAwarded <= 500 &&
+             data.milestone3BadgeAwarded is bool &&
+             data.milestone5BonusAwarded is bool &&
+             (data.attributionSource in ['app_link', 'deep_link', 'install_referrer', 'manual_code']) &&
+             (!('targetLanguageCode' in data) || (data.targetLanguageCode is string && data.targetLanguageCode.size() <= 10)) &&
+             (!('nativeLanguageCode' in data) || (data.nativeLanguageCode is string && data.nativeLanguageCode.size() <= 10)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.completedAt is timestamp && data.completedAt <= request.time;
+    }
+
+    // --- Collections ---
+
+    // 1. User Profiles
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      allow list: if false; // Direct lookup only
+
+      allow create: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'nativeLanguageCode', 'targetLanguageCode',
+                         'activeLanguages', 'proficiencyLevel', 'xpPoints', 'level',
+                         'currentStreak', 'longestStreak', 'lastActiveDate', 'dailyGoalMinutes',
+                         'dailyAiSpeakingCount', 'dailyAiResetDate', 'subscriptionTier',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'avatarUrl', 'nativeLanguageCode', 'targetLanguageCode',
+                         'activeLanguages', 'proficiencyLevel', 'xpPoints', 'level',
+                         'currentStreak', 'longestStreak', 'lastActiveDate', 'dailyGoalMinutes',
+                         'dailyAiSpeakingCount', 'dailyAiResetDate', 'subscriptionTier',
+                         'purchaseToken', 'isFreeTrial', 'hasUsedFreeTrial',
+                         'subscriptionAutoRenewing', 'subscriptionExpiryEpochMs',
+                         'completedLessonIds', 'achievements', 'languageLevels',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().subscriptionTier == 'free' &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       request.auth.uid == userId &&
+                       isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUserProfile(incoming()) &&
+                       (incoming().subscriptionTier == 'free' || incoming().subscriptionTier == existing().subscriptionTier) &&
+                       (!('hasUsedFreeTrial' in existing()) || existing().hasUsedFreeTrial == false || ('hasUsedFreeTrial' in incoming() && incoming().hasUsedFreeTrial == true)) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'avatarUrl', 'nativeLanguageCode', 'targetLanguageCode',
+                         'activeLanguages', 'proficiencyLevel', 'xpPoints', 'level',
+                         'currentStreak', 'longestStreak', 'lastActiveDate', 'dailyGoalMinutes',
+                         'dailyAiSpeakingCount', 'dailyAiResetDate', 'subscriptionTier',
+                         'purchaseToken', 'isFreeTrial', 'hasUsedFreeTrial',
+                         'subscriptionAutoRenewing', 'subscriptionExpiryEpochMs',
+                         'completedLessonIds', 'achievements', 'languageLevels', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+
+      // 1b. User UI Preferences Subcollection (e.g., floating_continue position & toggle)
+      match /ui_preferences/{prefId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(prefId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(prefId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'enabled', 'snapSide', 'verticalFraction', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'enabled', 'snapSide', 'verticalFraction', 'hasSeenDragHint', 'updatedAt']) &&
+                         isValidUiPreference(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(prefId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().keys().hasOnly(['userId', 'enabled', 'snapSide', 'verticalFraction', 'hasSeenDragHint', 'updatedAt']) &&
+                         isValidUiPreference(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(prefId);
+      }
+
+      // 2. Isolated Private Info Subcollection (`entitlement` is strictly server-written only)
+      match /private/{docId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(docId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(docId) &&
+                         docId != 'entitlement' &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'email', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['userId', 'email', 'updatedAt']) &&
+                         isValidUserPrivateInfo(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(docId) &&
+                         docId != 'entitlement' &&
+                         incoming().userId == existing().userId &&
+                         isValidUserPrivateInfo(incoming()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['email', 'updatedAt']);
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(docId) && docId != 'entitlement';
+      }
+
+      // 2b. Separate Book Reading Progress Subcollection
+      match /book_reading_progress/{bookId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(bookId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'bookId', 'chapterIndex', 'scrollOffset', 'pageIndex', 'progressPercent', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'scrollOffset',
+                           'pageIndex', 'progressPercent', 'readingTheme', 'fontSizeSp',
+                           'isPageMode', 'completedChapters', 'updatedAt'
+                         ]) &&
+                         isValidBookReadingProgress(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().bookId == existing().bookId &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'scrollOffset',
+                           'pageIndex', 'progressPercent', 'readingTheme', 'fontSizeSp',
+                           'isPageMode', 'completedChapters', 'updatedAt'
+                         ]) &&
+                         isValidBookReadingProgress(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(bookId);
+      }
+
+      // 2c. Separate Book Listening Progress Subcollection
+      match /book_listening_progress/{bookId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(bookId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'bookId', 'chapterIndex', 'sentenceIndex', 'positionMs', 'progressPercent', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'sentenceIndex',
+                           'positionMs', 'progressPercent', 'preferredEditionId',
+                           'autoPlayNextChapter', 'isCompleted', 'completedChapters', 'updatedAt'
+                         ]) &&
+                         isValidBookListeningProgress(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().bookId == existing().bookId &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'sentenceIndex',
+                           'positionMs', 'progressPercent', 'preferredEditionId',
+                           'autoPlayNextChapter', 'isCompleted', 'completedChapters', 'updatedAt'
+                         ]) &&
+                         isValidBookListeningProgress(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(bookId);
+      }
+
+      // 2d. User Book Bookmarks Subcollection
+      match /book_bookmarks/{bookmarkId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(bookmarkId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookmarkId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().keys().hasAll(['userId', 'bookId', 'bookTitle', 'chapterIndex', 'chapterTitle', 'sentenceIndex', 'positionMs', 'snippetText', 'updatedAt']) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'chapterTitle',
+                           'sentenceIndex', 'positionMs', 'snippetText', 'note', 'updatedAt'
+                         ]) &&
+                         isValidBookBookmark(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(bookmarkId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().keys().hasOnly([
+                           'userId', 'bookId', 'bookTitle', 'chapterIndex', 'chapterTitle',
+                           'sentenceIndex', 'positionMs', 'snippetText', 'note', 'updatedAt'
+                         ]) &&
+                         isValidBookBookmark(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(bookmarkId);
+      }
+
+      // 2e. User Explore AI Learning Sessions Subcollection
+      match /explore_sessions/{sessionId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(sessionId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(sessionId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().sessionId == sessionId &&
+                         incoming().keys().hasAll([
+                           'userId', 'sessionId', 'featureType', 'languageCode',
+                           'title', 'summary', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'sessionId', 'featureType', 'languageCode',
+                           'title', 'summary', 'cefrLevel', 'turnsCount',
+                           'scorePercent', 'payloadJson', 'updatedAt'
+                         ]) &&
+                         isValidExploreSession(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(sessionId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().sessionId == existing().sessionId &&
+                         incoming().keys().hasOnly([
+                           'userId', 'sessionId', 'featureType', 'languageCode',
+                           'title', 'summary', 'cefrLevel', 'turnsCount',
+                           'scorePercent', 'payloadJson', 'updatedAt'
+                         ]) &&
+                         isValidExploreSession(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(sessionId);
+      }
+
+      // 2f. User Mistake Recovery Records Subcollection
+      match /mistake_records/{mistakeId} {
+        allow get: if isSignedIn() && request.auth.uid == userId && isValidId(mistakeId);
+        allow list: if isSignedIn() && request.auth.uid == userId;
+
+        allow create: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(mistakeId) &&
+                         incoming().userId == request.auth.uid &&
+                         incoming().mistakeId == mistakeId &&
+                         incoming().keys().hasAll([
+                           'userId', 'mistakeId', 'languageCode', 'languageName',
+                           'category', 'originalResponse', 'correctedVersion',
+                           'explanation', 'activitySource', 'reviewStatus',
+                           'occurrenceCount', 'masteryScore', 'updatedAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'userId', 'mistakeId', 'languageCode', 'languageName',
+                           'category', 'originalResponse', 'correctedVersion',
+                           'explanation', 'activitySource', 'reviewStatus',
+                           'occurrenceCount', 'masteryScore', 'updatedAt'
+                         ]) &&
+                         isValidMistakeRecord(incoming());
+
+        allow update: if isSignedIn() &&
+                         request.auth.uid == userId &&
+                         isValidId(mistakeId) &&
+                         incoming().userId == existing().userId &&
+                         incoming().mistakeId == existing().mistakeId &&
+                         incoming().keys().hasOnly([
+                           'userId', 'mistakeId', 'languageCode', 'languageName',
+                           'category', 'originalResponse', 'correctedVersion',
+                           'explanation', 'activitySource', 'reviewStatus',
+                           'occurrenceCount', 'masteryScore', 'updatedAt'
+                         ]) &&
+                         isValidMistakeRecord(incoming());
+
+        allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(mistakeId);
+      }
+    }
+
+    function hasVerifiedProEntitlement(uid) {
+      let entPath = /databases/$(database)/documents/users/$(uid)/private/entitlement;
+      return exists(entPath) &&
+             get(entPath).data.verifiedWithPlayApi == true &&
+             (get(entPath).data.status in ['pro_active', 'pro_grace']);
+    }
+
+    // 3. Lesson Progress (Pro-only structured lessons)
+    match /lesson_progress/{progressId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(progressId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(progressId) &&
+                       hasVerifiedProEntitlement(request.auth.uid) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'lessonId', 'languageCode', 'category',
+                         'scorePercent', 'xpEarned', 'completed', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'lessonId', 'languageCode', 'category',
+                         'scorePercent', 'xpEarned', 'completed', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidLessonProgress(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(progressId) &&
+                       hasVerifiedProEntitlement(request.auth.uid) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidLessonProgress(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'scorePercent', 'xpEarned', 'completed', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(progressId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 4. Flashcards Progress
+    match /flashcards/{cardId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(cardId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(cardId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'wordId', 'languageCode', 'frontText', 'backText',
+                         'pronunciation', 'boxLevel', 'nextReviewEpochDay', 'mastered',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'wordId', 'languageCode', 'frontText', 'backText',
+                         'pronunciation', 'boxLevel', 'nextReviewEpochDay', 'mastered',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidFlashcardProgress(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(cardId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidFlashcardProgress(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'frontText', 'backText', 'pronunciation', 'boxLevel',
+                         'nextReviewEpochDay', 'mastered', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(cardId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 5. Speaking Sessions
+    match /speaking_sessions/{sessionId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(sessionId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(sessionId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'languageCode', 'mode', 'scenarioTitle',
+                         'proficiencyLevel', 'turnsCount', 'fluencyScore',
+                         'grammarFeedbackSummary', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'languageCode', 'mode', 'scenarioTitle',
+                         'proficiencyLevel', 'turnsCount', 'fluencyScore',
+                         'grammarFeedbackSummary', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidSpeakingSession(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(sessionId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidSpeakingSession(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'turnsCount', 'fluencyScore', 'grammarFeedbackSummary', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(sessionId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 6. Public Community Profiles (for Partner Matching & Global Leaderboard)
+    match /community_profiles/{userId} {
+      allow get, list: if isSignedIn();
+
+      allow create, update: if isSignedIn() &&
+                               request.auth.uid == userId &&
+                               isValidId(userId) &&
+                               incoming().userId == request.auth.uid &&
+                               incoming().keys().hasAll([
+                                 'userId', 'displayName', 'country', 'countryFlag', 'bio',
+                                 'interests', 'nativeLanguageCode', 'targetLanguageCode',
+                                 'proficiencyLevel', 'xpPoints', 'level', 'currentStreak',
+                                 'isOnline', 'allowCalls', 'updatedAt'
+                               ]) &&
+                               incoming().keys().hasOnly([
+                                 'userId', 'displayName', 'avatarUrl', 'country', 'countryFlag', 'bio',
+                                 'interests', 'nativeLanguageCode', 'targetLanguageCode',
+                                 'proficiencyLevel', 'xpPoints', 'level', 'currentStreak',
+                                 'isOnline', 'presenceState', 'lastSeenEpochMs', 'lastHeartbeatEpochMs',
+                                 'showLastSeen', 'allowCalls', 'updatedAt'
+                               ]) &&
+                               isValidCommunityProfile(incoming());
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+    }
+
+    // 7. Friend Requests
+    match /friend_requests/{requestId} {
+      allow get, list: if isSignedIn() &&
+                          (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(requestId) &&
+                       incoming().senderId == request.auth.uid &&
+                       incoming().status == 'pending' &&
+                       isValidFriendRequest(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(requestId) &&
+                       (existing().senderId == request.auth.uid || existing().receiverId == request.auth.uid) &&
+                       incoming().senderId == existing().senderId &&
+                       incoming().receiverId == existing().receiverId &&
+                       isValidFriendRequest(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(requestId) &&
+                       (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+    }
+
+    // 8. Direct Chat Messages & Speaking Room Messages
+    match /chat_messages/{messageId} {
+      allow get, list: if isSignedIn() &&
+                          (resource.data.senderId == request.auth.uid ||
+                           resource.data.receiverId == request.auth.uid ||
+                           resource.data.receiverId == 'PUBLIC_ROOM');
+
+      allow create: if isSignedIn() &&
+                       isValidId(messageId) &&
+                       incoming().senderId == request.auth.uid &&
+                       isValidDirectChatMessage(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(messageId) &&
+                       (resource.data.senderId == request.auth.uid ||
+                        resource.data.receiverId == request.auth.uid) &&
+                       incoming().chatRoomId == resource.data.chatRoomId &&
+                       incoming().senderId == resource.data.senderId &&
+                       incoming().receiverId == resource.data.receiverId &&
+                       incoming().createdAt == resource.data.createdAt &&
+                       isValidDirectChatMessage(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(messageId) &&
+                       resource.data.senderId == request.auth.uid;
+    }
+
+    // 9. Call Rooms (Voice & Video Calling / Speaking Rooms / WebRTC Signaling)
+    match /call_rooms/{roomId} {
+      allow get, list: if isSignedIn();
+
+      allow create: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       incoming().callerId == request.auth.uid &&
+                       isValidCallRoom(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       (existing().callerId == request.auth.uid ||
+                        existing().calleeId == request.auth.uid ||
+                        existing().status == 'waiting' ||
+                        existing().matchMode == 'speaking_room') &&
+                       incoming().callerId == existing().callerId &&
+                       isValidCallRoom(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(roomId) &&
+                       (resource.data.callerId == request.auth.uid || resource.data.calleeId == request.auth.uid);
+    }
+
+    // 10. Call History Records
+    match /call_history/{callId} {
+      allow get, list: if isSignedIn() &&
+                          (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(callId) &&
+                       (incoming().callerId == request.auth.uid || incoming().receiverId == request.auth.uid) &&
+                       isValidCallHistoryRecord(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(callId) &&
+                       (existing().callerId == request.auth.uid || existing().receiverId == request.auth.uid) &&
+                       incoming().callerId == existing().callerId &&
+                       incoming().receiverId == existing().receiverId &&
+                       isValidCallHistoryRecord(incoming());
+
+      allow delete: if isSignedIn() &&
+                       isValidId(callId) &&
+                       (resource.data.callerId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+    }
+
+    // 11. User Safety Reports
+    match /user_reports/{reportId} {
+      allow get, list: if isSignedIn() && resource.data.reporterId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(reportId) &&
+                       incoming().reporterId == request.auth.uid &&
+                       isValidUserReport(incoming());
+
+      allow delete: if isSignedIn() && isValidId(reportId) && resource.data.reporterId == request.auth.uid;
+    }
+
+    // 12. User Blocks
+    match /user_blocks/{blockId} {
+      allow get, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(blockId) &&
+                       incoming().userId == request.auth.uid &&
+                       isValidUserBlock(incoming());
+
+      allow delete: if isSignedIn() && isValidId(blockId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 13. User Notifications
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(notificationId) &&
+                       isValidUserNotification(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(notificationId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       isValidUserNotification(incoming());
+
+      allow delete: if isSignedIn() && isValidId(notificationId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 14. Saved Videos (LingoSphere Videos)
+    match /saved_videos/{savedId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(savedId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(savedId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'videoId', 'title', 'channelTitle', 'thumbnailUrl',
+                         'durationText', 'languageCode', 'proficiencyLevel', 'topicCategory',
+                         'description', 'captionSummary', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'videoId', 'title', 'channelTitle', 'thumbnailUrl',
+                         'durationText', 'languageCode', 'proficiencyLevel', 'topicCategory',
+                         'description', 'captionSummary', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidSavedVideo(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(savedId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidSavedVideo(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'title', 'channelTitle', 'thumbnailUrl', 'durationText',
+                         'proficiencyLevel', 'topicCategory', 'description',
+                         'captionSummary', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(savedId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 15. Video Playlists (LingoSphere Videos)
+    match /video_playlists/{playlistId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(playlistId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(playlistId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'playlistId', 'name', 'description', 'languageCode',
+                         'proficiencyLevel', 'videoIds', 'videoTitles', 'videoThumbnails',
+                         'videoChannels', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'playlistId', 'name', 'description', 'languageCode',
+                         'proficiencyLevel', 'videoIds', 'videoTitles', 'videoThumbnails',
+                         'videoChannels', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidVideoPlaylist(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(playlistId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().playlistId == existing().playlistId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidVideoPlaylist(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'name', 'description', 'languageCode', 'proficiencyLevel',
+                         'videoIds', 'videoTitles', 'videoThumbnails', 'videoChannels',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(playlistId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 16. Video Watch History (LingoSphere Videos)
+    match /video_watch_history/{historyId} {
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid && isValidId(historyId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(historyId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'videoId', 'title', 'channelTitle', 'thumbnailUrl',
+                         'durationText', 'languageCode', 'proficiencyLevel',
+                         'watchedSeconds', 'completedQuiz', 'quizScorePercent', 'xpEarned',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'videoId', 'title', 'channelTitle', 'thumbnailUrl',
+                         'durationText', 'languageCode', 'proficiencyLevel',
+                         'watchedSeconds', 'completedQuiz', 'quizScorePercent', 'xpEarned',
+                         'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidVideoWatchHistory(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(historyId) &&
+                       existing().userId == request.auth.uid &&
+                       incoming().userId == existing().userId &&
+                       incoming().videoId == existing().videoId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidVideoWatchHistory(incoming()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'watchedSeconds', 'completedQuiz', 'quizScorePercent', 'xpEarned', 'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() && isValidId(historyId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 17. FCM Device Registration Tokens (Incoming Call Push Notifications)
+    match /fcm_tokens/{tokenId} {
+      allow get: if isSignedIn() && isValidId(tokenId) && resource.data.userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create, update: if isSignedIn() &&
+                               isValidId(tokenId) &&
+                               incoming().userId == request.auth.uid &&
+                               incoming().tokenId is string && incoming().tokenId == tokenId &&
+                               incoming().fcmToken is string && incoming().fcmToken.size() >= 10 && incoming().fcmToken.size() <= 4096 &&
+                               incoming().deviceId is string && incoming().deviceId.size() >= 1 && incoming().deviceId.size() <= 128 &&
+                               incoming().deviceModel is string && incoming().deviceModel.size() <= 120 &&
+                               incoming().platform == 'android' &&
+                               incoming().notificationsEnabled is bool &&
+                               incoming().updatedAt is timestamp && incoming().updatedAt <= request.time &&
+                               incoming().keys().hasOnly([
+                                 'tokenId', 'userId', 'fcmToken', 'deviceId',
+                                 'deviceModel', 'platform', 'notificationsEnabled', 'updatedAt'
+                               ]);
+
+      allow delete: if isSignedIn() && isValidId(tokenId) && resource.data.userId == request.auth.uid;
+    }
+
+    // 18. Account-Bound Gemini AI Usage Quotas & Cost Telemetry (Anti-Reinstall Quota Bypass)
+    match /ai_usage_quotas/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      allow list: if false;
+
+      allow create, update: if isSignedIn() &&
+                               request.auth.uid == userId &&
+                               isValidId(userId) &&
+                               incoming().userId == request.auth.uid &&
+                               incoming().currentMonthKey is string && incoming().currentMonthKey.size() <= 16 &&
+                               incoming().currentDayKey is string && incoming().currentDayKey.size() <= 16 &&
+                               incoming().monthlyAiVoiceSecondsUsed is int && incoming().monthlyAiVoiceSecondsUsed >= 0 &&
+                               incoming().monthlyAiVideoSecondsUsed is int && incoming().monthlyAiVideoSecondsUsed >= 0 &&
+                               incoming().dailyGrammarChecksUsed is int && incoming().dailyGrammarChecksUsed >= 0 &&
+                               incoming().dailyPronunciationChecksUsed is int && incoming().dailyPronunciationChecksUsed >= 0 &&
+                               incoming().dailyIntelligentStudioUsed is int && incoming().dailyIntelligentStudioUsed >= 0 &&
+                               incoming().dailyHumanCallSecondsUsed is int && incoming().dailyHumanCallSecondsUsed >= 0 &&
+                               incoming().monthlyInputTokens is int && incoming().monthlyInputTokens >= 0 &&
+                               incoming().monthlyOutputTokens is int && incoming().monthlyOutputTokens >= 0 &&
+                               incoming().monthlyEstimatedCostUsd is number && incoming().monthlyEstimatedCostUsd >= 0 &&
+                               incoming().updatedAt is timestamp && incoming().updatedAt <= request.time;
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+    }
+
+    // 19. Publicly Resolvable Referral Codes (Direct Get Only — No Collection Listing, Zero PII)
+    match /referral_codes/{code} {
+      allow get: if isSignedIn() && isValidReferralCodeId(code);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidReferralCodeId(code) &&
+                       incoming().code == code &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().keys().hasAll(['code', 'ownerUid', 'ownerDisplayName', 'isActive', 'createdAt']) &&
+                       incoming().keys().hasOnly([
+                         'code', 'ownerUid', 'ownerDisplayName',
+                         'ownerTargetLanguage', 'ownerNativeLanguage', 'isActive', 'createdAt'
+                       ]) &&
+                       isValidReferralCodeDoc(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidReferralCodeId(code) &&
+                       existing().ownerUid == request.auth.uid &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().code == existing().code &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().keys().hasOnly([
+                         'code', 'ownerUid', 'ownerDisplayName',
+                         'ownerTargetLanguage', 'ownerNativeLanguage', 'isActive', 'createdAt'
+                       ]) &&
+                       isValidReferralCodeDoc(incoming());
+
+      allow delete: if isSignedIn() && isValidReferralCodeId(code) && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // 20. Per-User Referral Summaries (Protected Against Self-Minting XP & Rewards)
+    match /referral_summaries/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       incoming().keys().hasAll([
+                         'userId', 'referralCode', 'successfulReferralsCount', 'syncedReferralsCount',
+                         'pendingInvitationsCount', 'totalXpEarnedFromReferrals',
+                         'unlockedBadges', 'bonusSpeakingCredits', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'referralCode', 'successfulReferralsCount', 'syncedReferralsCount',
+                         'pendingInvitationsCount', 'totalXpEarnedFromReferrals',
+                         'unlockedBadges', 'bonusSpeakingCredits', 'referredByCode', 'referredByUid', 'updatedAt'
+                       ]) &&
+                       isValidReferralSummary(incoming()) &&
+                       (
+                         (
+                           request.auth.uid == userId &&
+                           incoming().userId == request.auth.uid &&
+                           incoming().successfulReferralsCount == 0 &&
+                           incoming().syncedReferralsCount == 0 &&
+                           incoming().totalXpEarnedFromReferrals == 0 &&
+                           incoming().bonusSpeakingCredits == 0 &&
+                           incoming().unlockedBadges.size() == 0
+                         ) ||
+                         (
+                           request.auth.uid != userId &&
+                           !exists(/databases/$(database)/documents/referrals/$(request.auth.uid)) &&
+                           existsAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)) &&
+                           getAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)).data.inviterUid == userId &&
+                           incoming().userId == userId &&
+                           incoming().successfulReferralsCount == 1 &&
+                           incoming().syncedReferralsCount == 0 &&
+                           incoming().totalXpEarnedFromReferrals == 100 &&
+                           incoming().bonusSpeakingCredits == 0 &&
+                           incoming().unlockedBadges.size() == 0
+                         )
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().referralCode == existing().referralCode &&
+                       incoming().keys().hasOnly([
+                         'userId', 'referralCode', 'successfulReferralsCount', 'syncedReferralsCount',
+                         'pendingInvitationsCount', 'totalXpEarnedFromReferrals',
+                         'unlockedBadges', 'bonusSpeakingCredits', 'referredByCode', 'referredByUid', 'updatedAt'
+                       ]) &&
+                       isValidReferralSummary(incoming()) &&
+                       (
+                         (
+                           request.auth.uid == userId &&
+                           incoming().successfulReferralsCount == existing().successfulReferralsCount &&
+                           incoming().syncedReferralsCount >= existing().syncedReferralsCount &&
+                           incoming().syncedReferralsCount <= existing().successfulReferralsCount &&
+                           incoming().unlockedBadges.hasAll(existing().unlockedBadges) &&
+                           (
+                             !('community_builder_3' in incoming().unlockedBadges) ||
+                             ('community_builder_3' in existing().unlockedBadges) ||
+                             existing().successfulReferralsCount >= 3
+                           ) &&
+                           (
+                             !('lingo_mentor_5' in incoming().unlockedBadges) ||
+                             ('lingo_mentor_5' in existing().unlockedBadges) ||
+                             existing().successfulReferralsCount >= 5
+                           ) &&
+                           (
+                             (!('lingo_mentor_5' in existing().unlockedBadges) &&
+                              ('lingo_mentor_5' in incoming().unlockedBadges) &&
+                              existing().successfulReferralsCount >= 5)
+                               ? (incoming().totalXpEarnedFromReferrals == existing().totalXpEarnedFromReferrals + 250 &&
+                                  incoming().bonusSpeakingCredits == existing().bonusSpeakingCredits + 3)
+                               : (incoming().totalXpEarnedFromReferrals == existing().totalXpEarnedFromReferrals &&
+                                  incoming().bonusSpeakingCredits == existing().bonusSpeakingCredits)
+                           )
+                         ) ||
+                         (
+                           request.auth.uid != userId &&
+                           !exists(/databases/$(database)/documents/referrals/$(request.auth.uid)) &&
+                           existsAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)) &&
+                           getAfter(/databases/$(database)/documents/referrals/$(request.auth.uid)).data.inviterUid == userId &&
+                           incoming().successfulReferralsCount == existing().successfulReferralsCount + 1 &&
+                           incoming().syncedReferralsCount == existing().syncedReferralsCount &&
+                           incoming().unlockedBadges == existing().unlockedBadges &&
+                           incoming().bonusSpeakingCredits == existing().bonusSpeakingCredits &&
+                           incoming().totalXpEarnedFromReferrals == existing().totalXpEarnedFromReferrals + 100
+                         )
+                       );
+
+      allow delete: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+    }
+
+    // 21. Unique Per-New-Account Referral Attribution Records (Document ID == referredUid)
+    match /referrals/{referredUid} {
+      allow get, list: if isSignedIn() &&
+                          (resource.data.inviterUid == request.auth.uid || resource.data.referredUid == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidId(referredUid) &&
+                       referredUid == request.auth.uid &&
+                       incoming().referralId == referredUid &&
+                       incoming().referredUid == request.auth.uid &&
+                       incoming().inviterUid != request.auth.uid &&
+                       incoming().status in ['pending', 'completed'] &&
+                       incoming().inviterXpAwarded == 100 &&
+                       incoming().referredXpAwarded == 100 &&
+                       incoming().keys().hasAll([
+                         'referralId', 'inviterUid', 'inviterName', 'referredUid', 'referredName',
+                         'referralCode', 'status', 'inviterXpAwarded', 'referredXpAwarded',
+                         'milestone3BadgeAwarded', 'milestone5BonusAwarded', 'attributionSource',
+                         'createdAt', 'completedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'referralId', 'inviterUid', 'inviterName', 'referredUid', 'referredName',
+                         'referralCode', 'status', 'inviterXpAwarded', 'referredXpAwarded',
+                         'milestone3BadgeAwarded', 'milestone5BonusAwarded', 'attributionSource',
+                         'targetLanguageCode', 'nativeLanguageCode', 'createdAt', 'completedAt'
+                       ]) &&
+                       exists(/databases/$(database)/documents/referral_codes/$(incoming().referralCode)) &&
+                       get(/databases/$(database)/documents/referral_codes/$(incoming().referralCode)).data.ownerUid == incoming().inviterUid &&
+                       get(/databases/$(database)/documents/referral_codes/$(incoming().referralCode)).data.isActive == true &&
+                       isValidReferralRecord(incoming());
+
+      allow update, delete: if false;
+    }
+
+    // 22. App Release Metadata (Read-only for signed-in clients; written by backend/admin)
+    match /app_releases/{releaseId} {
+      allow get: if isSignedIn() && isValidId(releaseId);
+      allow list, write: if false;
+    }
+
+    // 23. Authoritative Subscription Entitlement (Read-only for owner; written ONLY by server Admin SDK)
+    match /users/{userId}/private/{docId} {
+      allow get: if isSignedIn() && request.auth.uid == userId && docId == 'entitlement';
+      allow list, write: if false;
+    }
+
+    // 24. Google Play Purchase Token Registry (1-token-to-1-UID binding; server-only)
+    match /purchases/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    // 25. Per-User Timezone-Aware Daily & Monthly AI Usage Quotas (Read-only for owner; written ONLY by server Admin SDK)
+    match /usage/{userId}/daily/{dayKey} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+    match /usage/{userId}/monthly/{monthKey} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+      allow write: if false;
+    }
+
+    // 26. Per-Call AI Usage Events Audit Log (Server-only)
+    match /usageEvents/{eventId} {
+      allow read, write: if false;
+    }
+
+    // 27. Server Configuration Documents (accessPolicy, pricing, freeContent — read-only for signed-in users)
+    match /config/{docId} {
+      allow get: if isSignedIn() && docId in ['accessPolicy', 'pricing', 'freeContent'];
+      allow list, write: if false;
+    }
+
+    // 28. Deterministic Content-Hash AI Response Cache (Server-only)
+    match /aiCache/{hash} {
+      allow read, write: if false;
+    }
+
+    // 29. Abuse & Rate-Limit Flags (Server-only)
+    match /abuse/{userId} {
+      allow read, write: if false;
+    }
+
+    // 30. Cached Dynamic Word of the Day per Language + CEFR Level + Day
+    match /wordOfTheDay/{docId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+                               isValidId(docId) &&
+                               incoming().keys().hasAll(['docId', 'languageCode', 'cefrLevel', 'dayKey', 'word', 'meaning', 'exampleSentence', 'updatedAt']) &&
+                               isNonEmptyString(incoming().word, 80) &&
+                               isNonEmptyString(incoming().meaning, 240) &&
+                               isNonEmptyString(incoming().exampleSentence, 320);
+      allow delete: if false;
+    }
+
+    // 31. Single Active AI Tutor Session Lock per User (Read-only for owner; written by backend)
+    match /activeTutorSessions/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list, write: if false;
+    }
+
+    // 32. Server-Gated Lesson Content (Pro-only; served via getLessonContent Cloud Function)
+    match /lessonContent/{lessonId} {
+      allow read, write: if false;
+    }
+
+    // 33. Rewarded Ad Unlock Quotas (/ad_unlock_quotas/{userId})
+    // Enforces max 5 daily "Watch an ad to try Premium" unlocks per user in Firestore
+    // so reinstalling the app cannot reset the daily counter.
+    match /ad_unlock_quotas/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+
+      allow create: if isSignedIn()
+                    && request.auth.uid == userId
+                    && incoming().keys().hasAll(['userId', 'dayKey', 'unlocksUsedToday', 'updatedAt'])
+                    && incoming().keys().hasOnly(['userId', 'dayKey', 'unlocksUsedToday', 'bonusBooksUnlockedThisMonth', 'monthKey', 'updatedAt'])
+                    && incoming().userId == request.auth.uid
+                    && isNonEmptyString(incoming().dayKey, 16)
+                    && incoming().unlocksUsedToday is int
+                    && incoming().unlocksUsedToday >= 0
+                    && incoming().unlocksUsedToday <= 5
+                    && (!('bonusBooksUnlockedThisMonth' in incoming()) || (incoming().bonusBooksUnlockedThisMonth is int && incoming().bonusBooksUnlockedThisMonth >= 0 && incoming().bonusBooksUnlockedThisMonth <= 30))
+                    && (!('monthKey' in incoming()) || (incoming().monthKey is string && incoming().monthKey.size() <= 16))
+                    && incoming().updatedAt is int;
+
+      allow update: if isSignedIn()
+                    && request.auth.uid == userId
+                    && incoming().keys().hasAll(['userId', 'dayKey', 'unlocksUsedToday', 'updatedAt'])
+                    && incoming().keys().hasOnly(['userId', 'dayKey', 'unlocksUsedToday', 'bonusBooksUnlockedThisMonth', 'monthKey', 'updatedAt'])
+                    && incoming().userId == existing().userId
+                    && isNonEmptyString(incoming().dayKey, 16)
+                    && incoming().unlocksUsedToday is int
+                    && incoming().unlocksUsedToday >= 0
+                    && incoming().unlocksUsedToday <= 5
+                    && (
+                      incoming().dayKey != existing().dayKey
+                      || incoming().unlocksUsedToday >= existing().unlocksUsedToday
+                    )
+                    && (!('bonusBooksUnlockedThisMonth' in incoming()) || (incoming().bonusBooksUnlockedThisMonth is int && incoming().bonusBooksUnlockedThisMonth >= 0 && incoming().bonusBooksUnlockedThisMonth <= 30))
+                    && (!('monthKey' in incoming()) || (incoming().monthKey is string && incoming().monthKey.size() <= 16))
+                    && incoming().updatedAt is int;
+
+      allow delete: if false;
+    }
+  }
+}

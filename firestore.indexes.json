@@ -1,0 +1,105 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "community_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nativeLanguageCode", "order": "ASCENDING" },
+        { "fieldPath": "xpPoints", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "community_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetLanguageCode", "order": "ASCENDING" },
+        { "fieldPath": "xpPoints", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "community_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "country", "order": "ASCENDING" },
+        { "fieldPath": "xpPoints", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "community_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "nativeLanguageCode", "order": "ASCENDING" },
+        { "fieldPath": "country", "order": "ASCENDING" },
+        { "fieldPath": "xpPoints", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "community_profiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetLanguageCode", "order": "ASCENDING" },
+        { "fieldPath": "country", "order": "ASCENDING" },
+        { "fieldPath": "xpPoints", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chat_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "receiverId", "order": "ASCENDING" },
+        { "fieldPath": "chatRoomId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chat_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "chatRoomId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chat_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chat_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "receiverId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "call_rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "calleeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "call_rooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "matchMode", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "referrals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "inviterUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

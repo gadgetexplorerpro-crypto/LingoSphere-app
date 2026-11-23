@@ -1,0 +1,835 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Public profile, language preferences, and gamification state for a learner",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "displayName": { "type": "string", "description": "Learner name" },
+        "avatarUrl": { "type": "string", "description": "Uploaded profile photo data URI or URL" },
+        "nativeLanguageCode": { "type": "string", "description": "Native language code e.g. en, es, ar, ur" },
+        "targetLanguageCode": { "type": "string", "description": "Target language code e.g. es, fr, ja, ar, ur" },
+        "activeLanguages": { "type": "array", "description": "List of languages being learned" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "xpPoints": { "type": "integer", "description": "Experience points" },
+        "level": { "type": "integer", "description": "Level calculated from XP" },
+        "currentStreak": { "type": "integer", "description": "Daily streak days" },
+        "longestStreak": { "type": "integer", "description": "Record streak days" },
+        "lastActiveDate": { "type": "string", "description": "ISO date YYYY-MM-DD" },
+        "dailyGoalMinutes": { "type": "integer", "description": "Daily study target in minutes" },
+        "dailyAiSpeakingCount": { "type": "integer", "description": "Count of AI speaking turns practiced today" },
+        "dailyAiResetDate": { "type": "string", "description": "ISO date YYYY-MM-DD" },
+        "subscriptionTier": { "type": "string", "enum": ["free", "premium_monthly", "premium_pro", "premium_yearly"] },
+        "purchaseToken": { "type": "string", "description": "Google Play Billing purchase token" },
+        "isFreeTrial": { "type": "boolean", "description": "Whether current subscription is in 7-day free trial phase" },
+        "hasUsedFreeTrial": { "type": "boolean", "description": "Whether this account has previously redeemed a free trial" },
+        "subscriptionAutoRenewing": { "type": "boolean", "description": "Whether Google Play subscription is set to auto-renew" },
+        "subscriptionExpiryEpochMs": { "type": "integer", "description": "Epoch ms when current trial or billing cycle ends" },
+        "completedLessonIds": { "type": "array", "description": "IDs of completed curriculum lessons" },
+        "achievements": { "type": "array", "description": "Badges and achievements unlocked" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "nativeLanguageCode",
+        "targetLanguageCode",
+        "activeLanguages",
+        "proficiencyLevel",
+        "xpPoints",
+        "level",
+        "currentStreak",
+        "longestStreak",
+        "lastActiveDate",
+        "dailyGoalMinutes",
+        "dailyAiSpeakingCount",
+        "dailyAiResetDate",
+        "subscriptionTier",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "Strictly isolated private PII for a learner",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "email": { "type": "string", "description": "Owner email address" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "updatedAt"]
+    },
+    "LessonProgress": {
+      "title": "LessonProgress",
+      "description": "Progress tracking for completed lesson modules and quizzes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "lessonId": { "type": "string", "description": "Unique lesson unit identifier" },
+        "languageCode": { "type": "string", "description": "Target language studied" },
+        "category": { "type": "string", "enum": ["Vocabulary", "Grammar", "Listening", "Reading", "Writing", "Quiz"] },
+        "scorePercent": { "type": "integer", "description": "Percentage score 0-100" },
+        "xpEarned": { "type": "integer", "description": "XP gained from completion" },
+        "completed": { "type": "boolean", "description": "Whether module is finished" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "lessonId",
+        "languageCode",
+        "category",
+        "scorePercent",
+        "xpEarned",
+        "completed",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FlashcardProgress": {
+      "title": "FlashcardProgress",
+      "description": "Spaced repetition flashcard mastery per user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "wordId": { "type": "string", "description": "Word/phrase identifier" },
+        "languageCode": { "type": "string", "description": "Language code" },
+        "frontText": { "type": "string", "description": "Word in target language" },
+        "backText": { "type": "string", "description": "Translation in native language" },
+        "pronunciation": { "type": "string", "description": "Phonetic / IPA pronunciation" },
+        "boxLevel": { "type": "integer", "description": "Leitner box level 1 to 5" },
+        "nextReviewEpochDay": { "type": "integer", "description": "Epoch day for scheduled review" },
+        "mastered": { "type": "boolean", "description": "Whether term is fully mastered" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "wordId",
+        "languageCode",
+        "frontText",
+        "backText",
+        "pronunciation",
+        "boxLevel",
+        "nextReviewEpochDay",
+        "mastered",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SpeakingSession": {
+      "title": "SpeakingSession",
+      "description": "History and evaluation of AI Speaking Tutor and Roleplay conversations",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "languageCode": { "type": "string", "description": "Language practiced" },
+        "mode": { "type": "string", "enum": ["Tutor", "Roleplay"] },
+        "scenarioTitle": { "type": "string", "description": "Scenario or conversation topic" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "turnsCount": { "type": "integer", "description": "Total dialogue turns exchanged" },
+        "fluencyScore": { "type": "integer", "description": "Fluency score 0-100" },
+        "grammarFeedbackSummary": { "type": "string", "description": "Grammar and pronunciation review" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "languageCode",
+        "mode",
+        "scenarioTitle",
+        "proficiencyLevel",
+        "turnsCount",
+        "fluencyScore",
+        "grammarFeedbackSummary",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CommunityProfile": {
+      "title": "CommunityProfile",
+      "description": "Publicly discoverable learner card for partner matching and leaderboard",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "country": { "type": "string" },
+        "countryFlag": { "type": "string" },
+        "bio": { "type": "string" },
+        "interests": { "type": "array" },
+        "nativeLanguageCode": { "type": "string" },
+        "targetLanguageCode": { "type": "string" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "xpPoints": { "type": "integer" },
+        "level": { "type": "integer" },
+        "currentStreak": { "type": "integer" },
+        "isOnline": { "type": "boolean" },
+        "presenceState": { "type": "string", "enum": ["online", "away", "offline", "busy", "in_call", "available_to_match"] },
+        "lastSeenEpochMs": { "type": "integer" },
+        "lastHeartbeatEpochMs": { "type": "integer" },
+        "showLastSeen": { "type": "boolean" },
+        "allowCalls": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "country",
+        "countryFlag",
+        "bio",
+        "interests",
+        "nativeLanguageCode",
+        "targetLanguageCode",
+        "proficiencyLevel",
+        "xpPoints",
+        "level",
+        "currentStreak",
+        "isOnline",
+        "allowCalls",
+        "updatedAt"
+      ]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Friend connection request between two learners",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "receiverId", "receiverName", "status", "createdAt", "updatedAt"]
+    },
+    "DirectChatMessage": {
+      "title": "DirectChatMessage",
+      "description": "Real-time private message between two learners",
+      "type": "object",
+      "properties": {
+        "chatRoomId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "text": { "type": "string" },
+        "translatedText": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["chatRoomId", "senderId", "senderName", "receiverId", "text", "createdAt"]
+    },
+    "CallRoom": {
+      "title": "CallRoom",
+      "description": "Real-time WebRTC voice and video call signaling room",
+      "type": "object",
+      "properties": {
+        "roomId": { "type": "string" },
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "callerNativeLang": { "type": "string" },
+        "callerLearningLang": { "type": "string" },
+        "calleeId": { "type": "string" },
+        "calleeName": { "type": "string" },
+        "calleeNativeLang": { "type": "string" },
+        "calleeLearningLang": { "type": "string" },
+        "callType": { "type": "string", "enum": ["voice", "video"] },
+        "matchMode": { "type": "string", "enum": ["direct", "random", "country", "interest", "speaking_room"] },
+        "targetLanguageCode": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "ringing", "accepted", "connected", "ended", "rejected", "cancelled", "missed", "failed", "busy"]
+        },
+        "lastSignalingEvent": {
+          "type": "string",
+          "enum": [
+            "call_initiated",
+            "incoming_call",
+            "call_ringing",
+            "call_accepted",
+            "call_rejected",
+            "call_cancelled",
+            "call_connected",
+            "call_ended",
+            "call_missed",
+            "call_failed",
+            "ice_candidate",
+            "webrtc_offer",
+            "webrtc_answer",
+            "room_updated",
+            "participant_joined",
+            "participant_left"
+          ]
+        },
+        "isCallerMuted": { "type": "boolean" },
+        "isCalleeMuted": { "type": "boolean" },
+        "isVideoEnabled": { "type": "boolean" },
+        "isCallerVideoEnabled": { "type": "boolean" },
+        "isCalleeVideoEnabled": { "type": "boolean" },
+        "conversationTopic": { "type": "string" },
+        "roomTitle": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "participantLimit": { "type": "integer" },
+        "participantIds": { "type": "array" },
+        "participantNames": { "type": "array" },
+        "mutedParticipantIds": { "type": "array" },
+        "handRaisedParticipantIds": { "type": "array" },
+        "sdpOffer": { "type": "string" },
+        "sdpAnswer": { "type": "string" },
+        "callerIceCandidates": { "type": "array" },
+        "calleeIceCandidates": { "type": "array" },
+        "connectionState": {
+          "type": "string",
+          "enum": ["new", "checking", "connecting", "connected", "completed", "reconnecting", "disconnected", "failed", "closed"]
+        },
+        "connectedAtEpochMs": { "type": "integer" },
+        "endedAtEpochMs": { "type": "integer" },
+        "durationSeconds": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "roomId",
+        "callerId",
+        "callerName",
+        "calleeId",
+        "calleeName",
+        "callType",
+        "matchMode",
+        "targetLanguageCode",
+        "status",
+        "isCallerMuted",
+        "isCalleeMuted",
+        "isVideoEnabled",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CallHistoryRecord": {
+      "title": "CallHistoryRecord",
+      "description": "Completed, missed, rejected, cancelled, or failed voice/video call record",
+      "type": "object",
+      "properties": {
+        "callId": { "type": "string" },
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "receiverName": { "type": "string" },
+        "callType": { "type": "string", "enum": ["voice", "video"] },
+        "targetLanguageCode": { "type": "string" },
+        "startTimeEpochMs": { "type": "integer" },
+        "endTimeEpochMs": { "type": "integer" },
+        "durationSeconds": { "type": "integer" },
+        "status": { "type": "string", "enum": ["completed", "missed", "rejected", "cancelled", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "callId",
+        "callerId",
+        "callerName",
+        "receiverId",
+        "receiverName",
+        "callType",
+        "targetLanguageCode",
+        "startTimeEpochMs",
+        "endTimeEpochMs",
+        "durationSeconds",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserReport": {
+      "title": "UserReport",
+      "description": "Safety report submitted against a user",
+      "type": "object",
+      "properties": {
+        "reporterId": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reporterId", "targetUserId", "reason", "details", "createdAt"]
+    },
+    "UserBlock": {
+      "title": "UserBlock",
+      "description": "Blocked user record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "blockedUserId": { "type": "string" },
+        "blockedUserName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "blockedUserId", "blockedUserName", "createdAt"]
+    },
+    "UserNotification": {
+      "title": "UserNotification",
+      "description": "In-app and push notification record for a learner",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "targetRoute": { "type": "string" },
+        "targetId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "word": { "type": "string" },
+        "meaning": { "type": "string" },
+        "pronunciation": { "type": "string" },
+        "exampleSentence": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "SavedVideo": {
+      "title": "SavedVideo",
+      "description": "Bookmarked educational video saved by a learner in LingoSphere Videos",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "videoId": { "type": "string" },
+        "title": { "type": "string" },
+        "channelTitle": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "durationText": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "topicCategory": { "type": "string" },
+        "description": { "type": "string" },
+        "captionSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "videoId",
+        "title",
+        "channelTitle",
+        "thumbnailUrl",
+        "durationText",
+        "languageCode",
+        "proficiencyLevel",
+        "topicCategory",
+        "description",
+        "captionSummary",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VideoPlaylist": {
+      "title": "VideoPlaylist",
+      "description": "Custom language-learning video playlist created by a learner",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "playlistId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced", "All"] },
+        "videoIds": { "type": "array" },
+        "videoTitles": { "type": "array" },
+        "videoThumbnails": { "type": "array" },
+        "videoChannels": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "playlistId",
+        "name",
+        "description",
+        "languageCode",
+        "proficiencyLevel",
+        "videoIds",
+        "videoTitles",
+        "videoThumbnails",
+        "videoChannels",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VideoWatchHistory": {
+      "title": "VideoWatchHistory",
+      "description": "Watch history and quiz completion record for a video in LingoSphere Videos",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "videoId": { "type": "string" },
+        "title": { "type": "string" },
+        "channelTitle": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "durationText": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "proficiencyLevel": { "type": "string", "enum": ["Beginner", "Intermediate", "Advanced"] },
+        "watchedSeconds": { "type": "integer" },
+        "completedQuiz": { "type": "boolean" },
+        "quizScorePercent": { "type": "integer" },
+        "xpEarned": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "videoId",
+        "title",
+        "channelTitle",
+        "thumbnailUrl",
+        "durationText",
+        "languageCode",
+        "proficiencyLevel",
+        "watchedSeconds",
+        "completedQuiz",
+        "quizScorePercent",
+        "xpEarned",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FcmToken": {
+      "title": "FcmToken",
+      "description": "FCM registration token per user and device for background incoming call notifications",
+      "type": "object",
+      "properties": {
+        "tokenId": { "type": "string" },
+        "userId": { "type": "string" },
+        "fcmToken": { "type": "string" },
+        "deviceId": { "type": "string" },
+        "deviceModel": { "type": "string" },
+        "platform": { "type": "string" },
+        "notificationsEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "tokenId",
+        "userId",
+        "fcmToken",
+        "deviceId",
+        "deviceModel",
+        "platform",
+        "notificationsEnabled",
+        "updatedAt"
+      ]
+    },
+    "ReferralCode": {
+      "title": "ReferralCode",
+      "description": "Unique shareable referral code mapped to a user's UID without exposing private PII",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Unique uppercase alphanumeric referral code" },
+        "ownerUid": { "type": "string", "description": "Inviter Firebase UID" },
+        "ownerDisplayName": { "type": "string", "description": "Public display name shown on invite landing" },
+        "ownerTargetLanguage": { "type": "string", "description": "Language code inviter is learning" },
+        "ownerNativeLanguage": { "type": "string", "description": "Inviter native language code" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "ownerUid", "ownerDisplayName", "isActive", "createdAt"]
+    },
+    "ReferralSummary": {
+      "title": "ReferralSummary",
+      "description": "Per-user referral counters and reward totals",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "successfulReferralsCount": { "type": "integer" },
+        "syncedReferralsCount": { "type": "integer" },
+        "pendingInvitationsCount": { "type": "integer" },
+        "totalXpEarnedFromReferrals": { "type": "integer" },
+        "unlockedBadges": { "type": "array" },
+        "bonusSpeakingCredits": { "type": "integer" },
+        "referredByCode": { "type": "string" },
+        "referredByUid": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId",
+        "referralCode",
+        "successfulReferralsCount",
+        "syncedReferralsCount",
+        "pendingInvitationsCount",
+        "totalXpEarnedFromReferrals",
+        "unlockedBadges",
+        "bonusSpeakingCredits",
+        "updatedAt"
+      ]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Attributed signup record keyed by referredUid to prevent duplicate claims and self-referrals",
+      "type": "object",
+      "properties": {
+        "referralId": { "type": "string" },
+        "inviterUid": { "type": "string" },
+        "inviterName": { "type": "string" },
+        "referredUid": { "type": "string" },
+        "referredName": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "inviterXpAwarded": { "type": "integer" },
+        "referredXpAwarded": { "type": "integer" },
+        "milestone3BadgeAwarded": { "type": "boolean" },
+        "milestone5BonusAwarded": { "type": "boolean" },
+        "attributionSource": { "type": "string", "enum": ["app_link", "deep_link", "install_referrer", "manual_code"] },
+        "targetLanguageCode": { "type": "string" },
+        "nativeLanguageCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "referralId",
+        "inviterUid",
+        "inviterName",
+        "referredUid",
+        "referredName",
+        "referralCode",
+        "status",
+        "inviterXpAwarded",
+        "referredXpAwarded",
+        "milestone3BadgeAwarded",
+        "milestone5BonusAwarded",
+        "attributionSource",
+        "createdAt",
+        "completedAt"
+      ]
+    },
+    "AppRelease": {
+      "title": "AppRelease",
+      "description": "Published LingoSphere application release metadata and changelog for in-app update announcements",
+      "type": "object",
+      "properties": {
+        "versionCode": { "type": "integer", "description": "Android versionCode of the published release" },
+        "versionName": { "type": "string", "description": "Human-readable version string e.g. 29.0" },
+        "title": { "type": "string", "description": "Update announcement heading" },
+        "summary": { "type": "string", "description": "Update summary description" },
+        "releaseNotes": { "type": "array", "description": "List of release note bullet items" },
+        "isCritical": { "type": "boolean", "description": "Whether immediate update is required" },
+        "minRequiredVersionCode": { "type": "integer", "description": "Minimum supported versionCode" },
+        "publishedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["versionCode", "versionName", "title", "summary", "releaseNotes", "isCritical"]
+    },
+    "BookReadingProgress": {
+      "title": "BookReadingProgress",
+      "description": "Separate per-book reading position, chapter, page, and reader preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "bookId": { "type": "string", "description": "Unique book identifier" },
+        "bookTitle": { "type": "string", "description": "Display title of the book" },
+        "chapterIndex": { "type": "integer", "description": "Last read chapter index" },
+        "scrollOffset": { "type": "integer", "description": "Last read paragraph or scroll index" },
+        "pageIndex": { "type": "integer", "description": "Last read page index in paginated mode" },
+        "progressPercent": { "type": "number", "description": "Overall reading completion 0.0 to 1.0" },
+        "readingTheme": { "type": "string", "enum": ["LIGHT", "SEPIA", "DARK"] },
+        "fontSizeSp": { "type": "number", "description": "Preferred reader font size in sp" },
+        "isPageMode": { "type": "boolean", "description": "Whether paginated reader mode is enabled" },
+        "completedChapters": { "type": "array", "description": "Chapter indices finished reading" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bookId", "chapterIndex", "scrollOffset", "pageIndex", "progressPercent", "updatedAt"]
+    },
+    "BookListeningProgress": {
+      "title": "BookListeningProgress",
+      "description": "Separate per-book audiobook listening chapter, sentence, timestamp, and audio settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "bookId": { "type": "string", "description": "Unique book identifier" },
+        "bookTitle": { "type": "string", "description": "Display title of the book" },
+        "chapterIndex": { "type": "integer", "description": "Last listened chapter/episode index" },
+        "sentenceIndex": { "type": "integer", "description": "Last listened sentence index" },
+        "positionMs": { "type": "integer", "description": "Last audio playback position in milliseconds" },
+        "progressPercent": { "type": "number", "description": "Overall listening completion 0.0 to 1.0" },
+        "preferredEditionId": { "type": "string", "description": "Narrator preference (auto, librivox, tts)" },
+        "autoPlayNextChapter": { "type": "boolean" },
+        "isCompleted": { "type": "boolean" },
+        "completedChapters": { "type": "array", "description": "Chapter indices finished listening" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bookId", "chapterIndex", "sentenceIndex", "positionMs", "progressPercent", "updatedAt"]
+    },
+    "BookBookmark": {
+      "title": "BookBookmark",
+      "description": "User-saved bookmark within a book chapter for reading or listening",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Google UID" },
+        "bookId": { "type": "string", "description": "Book identifier" },
+        "bookTitle": { "type": "string", "description": "Book title" },
+        "chapterIndex": { "type": "integer" },
+        "chapterTitle": { "type": "string" },
+        "sentenceIndex": { "type": "integer" },
+        "positionMs": { "type": "integer" },
+        "snippetText": { "type": "string" },
+        "note": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "bookId", "bookTitle", "chapterIndex", "chapterTitle", "sentenceIndex", "positionMs", "snippetText", "updatedAt"]
+    },
+    "ExploreSession": {
+      "title": "ExploreSession",
+      "description": "Persisted AI learning session from LingoSphere Explore features",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "featureType": {
+          "type": "string",
+          "enum": ["living_immersion", "camera_lens", "emergency_pack", "ai_debate", "conversation_repair", "explain_three_ways", "conversation_detective", "mistake_recovery"]
+        },
+        "languageCode": { "type": "string" },
+        "title": { "type": "string" },
+        "summary": { "type": "string" },
+        "cefrLevel": { "type": "string" },
+        "turnsCount": { "type": "integer" },
+        "scorePercent": { "type": "integer" },
+        "payloadJson": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "sessionId", "featureType", "languageCode", "title", "summary", "updatedAt"]
+    },
+    "MistakeRecord": {
+      "title": "MistakeRecord",
+      "description": "Learner mistake captured from speaking, roleplay, debate, immersion, camera lens, repair, or writing for spaced-repetition recovery",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "mistakeId": { "type": "string" },
+        "languageCode": { "type": "string" },
+        "languageName": { "type": "string" },
+        "category": { "type": "string" },
+        "originalResponse": { "type": "string" },
+        "correctedVersion": { "type": "string" },
+        "explanation": { "type": "string" },
+        "activitySource": { "type": "string" },
+        "reviewStatus": { "type": "string", "enum": ["pending", "practicing", "mastered"] },
+        "occurrenceCount": { "type": "integer" },
+        "masteryScore": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "mistakeId", "languageCode", "languageName", "category", "originalResponse", "correctedVersion", "explanation", "activitySource", "reviewStatus", "occurrenceCount", "masteryScore", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and language progress"
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated private PII"
+    },
+    "/users/{userId}/book_reading_progress/{bookId}": {
+      "schema": { "$ref": "#/entities/BookReadingProgress" },
+      "description": "Separate per-book reading progress synced to Firebase"
+    },
+    "/users/{userId}/book_listening_progress/{bookId}": {
+      "schema": { "$ref": "#/entities/BookListeningProgress" },
+      "description": "Separate per-book listening progress synced to Firebase"
+    },
+    "/users/{userId}/book_bookmarks/{bookmarkId}": {
+      "schema": { "$ref": "#/entities/BookBookmark" },
+      "description": "Per-user saved book bookmarks synced to Firebase"
+    },
+    "/users/{userId}/explore_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/ExploreSession" },
+      "description": "Per-user Explore AI learning sessions synced to Firebase"
+    },
+    "/users/{userId}/mistake_records/{mistakeId}": {
+      "schema": { "$ref": "#/entities/MistakeRecord" },
+      "description": "Per-user Mistake Recovery records synced to Firebase"
+    },
+    "/lesson_progress/{progressId}": {
+      "schema": { "$ref": "#/entities/LessonProgress" },
+      "description": "Lesson and quiz completion progress"
+    },
+    "/flashcards/{cardId}": {
+      "schema": { "$ref": "#/entities/FlashcardProgress" },
+      "description": "Spaced repetition flashcards"
+    },
+    "/speaking_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/SpeakingSession" },
+      "description": "AI conversation history and feedback"
+    },
+    "/community_profiles/{userId}": {
+      "schema": { "$ref": "#/entities/CommunityProfile" },
+      "description": "Publicly discoverable learner profiles for partner matching and leaderboard"
+    },
+    "/friend_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Friend requests and friendships"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/DirectChatMessage" },
+      "description": "Direct messages between learners"
+    },
+    "/call_rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/CallRoom" },
+      "description": "Real-time WebRTC voice and video call signaling rooms"
+    },
+    "/call_history/{callId}": {
+      "schema": { "$ref": "#/entities/CallHistoryRecord" },
+      "description": "Persistent voice and video call history records"
+    },
+    "/user_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/UserReport" },
+      "description": "Safety reports submitted by learners"
+    },
+    "/user_blocks/{blockId}": {
+      "schema": { "$ref": "#/entities/UserBlock" },
+      "description": "Blocked user records"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/UserNotification" },
+      "description": "User notifications"
+    },
+    "/saved_videos/{savedId}": {
+      "schema": { "$ref": "#/entities/SavedVideo" },
+      "description": "Saved educational videos per user"
+    },
+    "/video_playlists/{playlistId}": {
+      "schema": { "$ref": "#/entities/VideoPlaylist" },
+      "description": "Custom educational video playlists per user"
+    },
+    "/video_watch_history/{historyId}": {
+      "schema": { "$ref": "#/entities/VideoWatchHistory" },
+      "description": "Video watch history and quiz scores per user"
+    },
+    "/fcm_tokens/{tokenId}": {
+      "schema": { "$ref": "#/entities/FcmToken" },
+      "description": "Registered FCM device tokens per user for incoming call push notifications"
+    },
+    "/ai_usage_quotas/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Server-synced Gemini AI usage quotas and monthly/daily cost telemetry per user"
+    },
+    "/referral_codes/{code}": {
+      "schema": { "$ref": "#/entities/ReferralCode" },
+      "description": "Publicly resolvable referral codes without private PII"
+    },
+    "/referral_summaries/{userId}": {
+      "schema": { "$ref": "#/entities/ReferralSummary" },
+      "description": "Per-user referral counters, rewards, and badges"
+    },
+    "/referrals/{referredUid}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Unique per-new-account referral attribution records"
+    },
+    "/app_releases/{releaseId}": {
+      "schema": { "$ref": "#/entities/AppRelease" },
+      "description": "Published LingoSphere version metadata and release notes"
+    }
+  }
+}
