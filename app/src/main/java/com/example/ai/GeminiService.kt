@@ -135,7 +135,6 @@ object GeminiService {
   private const val TAG = "GeminiService"
   const val MODEL_FLASH = "gemini-3.8-flash"
   const val MODEL_FLASH_LITE = "gemini-3.5-flash-lite"
-  const val MODEL_TTS = "gemini-3.1-flash-tts-preview"
 
   const val DEFAULT_TIMEOUT_MS = 20_000L
   const val MULTIMODAL_TIMEOUT_MS = 25_000L
@@ -935,35 +934,15 @@ object GeminiService {
   }
 
   /**
-   * Pre-generates and caches the next CEFR lesson in the background so opening it is instant
-   * and available offline. Does not count against the user's manual quota or trigger paywall popups.
+   * Background lesson pre-generation is disabled so Gemini API calls are triggered strictly on demand
+   * when the learner actively opens a lesson or AI feature.
    */
+  @Suppress("UNUSED_PARAMETER")
   fun pregenerateNextLessonInBackground(
     userContext: GeminiUserContext,
     nextLesson: CurriculumLesson
   ) {
-    if (!isVerifiedProActive() && !testBypassDailyQuota) return
-    val key = "pregen_${nextLesson.id}_${userContext.targetLanguageCode}_${userContext.cefrLevel}"
-    if (!inFlightPregenKeys.add(key)) return
-    backgroundScope.launch {
-      try {
-        if (!isNetworkAvailable()) return@launch
-        val cacheKey = "cefr_lesson_${userContext.targetLanguageCode}_${userContext.nativeLanguageCode}_${nextLesson.cefrLevel}_${nextLesson.title.lowercase()}"
-        if (readFromCache(cacheKey) != null) return@launch
-        generateCefrLessonStructured(
-          userContext = userContext.copy(cefrLevel = nextLesson.cefrLevel),
-          topic = nextLesson.title,
-          lessonIdOverride = nextLesson.id,
-          countTowardQuota = false
-        )
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Log.d(TAG, "Background lesson pre-generation skipped: ${e.message}")
-      } finally {
-        inFlightPregenKeys.remove(key)
-      }
-    }
+    // No-op: never spend paid Gemini tokens speculatively in the background.
   }
 
   private fun parseCefrLessonJson(

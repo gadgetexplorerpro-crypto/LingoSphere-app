@@ -24,12 +24,6 @@ import androidx.core.content.ContextCompat
 import com.example.ai.GeminiTutorService
 import com.example.avatar.TutorViseme
 import com.example.data.model.TutorVoice
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.ResponseModality
-import com.google.firebase.ai.type.SpeechConfig
-import com.google.firebase.ai.type.Voice
-import com.google.firebase.ai.type.generationConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -170,10 +164,7 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
     private const val PREFS_NAME = "lingosphere_prefs"
     const val KEY_PARTNER_VOICE_ID = "selected_tutor_voice_id"
     const val KEY_AUDIOBOOK_VOICE_ID = "selected_audiobook_voice_id"
-    private const val GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview"
     private const val TTS_CACHE_DIR = "tts_voice_cache"
-    private const val GEMINI_TTS_TIMEOUT_MS = 5_000L
-    private const val TTS_FAILURE_COOLDOWN_MS = 120_000L
   }
 
   @Volatile
@@ -207,7 +198,7 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
   }
 
   fun getSupportedVoicesForLanguage(@Suppress("UNUSED_PARAMETER") languageCode: String): List<TutorVoice> {
-    // All 15 distinct prebuilt voices in TutorVoice map 1-to-1 to distinct gemini-3.1-flash-tts-preview voices
+    // All 15 distinct voice profiles rendered locally via on-device Android TextToSpeech ($0 cloud cost)
     return TutorVoice.entries.distinctBy { it.providerVoiceId }
   }
 
@@ -708,57 +699,21 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
       }
     }
 
-    // In Robolectric unit tests, skip network Gemini audio fetch and run fast deterministic fallback
+    // Route all voice playback and previews directly through free on-device Android TextToSpeech ($0 cloud cost).
     if (isRobolectricRuntime()) {
       startAudioSpeechAnimation(spokenText, speed, uiReferenceText = text)
-      dispatchSystemTtsOrFallback(
-        spokenText = spokenText,
-        uiReferenceText = text,
-        languageCode = languageCode,
-        pitch = pitch,
-        speed = speed,
-        targetVoice = targetVoice,
-        utteranceId = utteranceId,
-        isPreview = isPreview,
-        genId = genId
-      )
-      return
     }
-
-    _synthesizingVoiceId.value = targetVoice.id
-    ttsSynthJob = coroutineScope.launch {
-      val audioFile = withContext(Dispatchers.IO) {
-        synthesizeOrLoadGeminiTtsAudioFile(
-          spokenText = spokenText,
-          voice = targetVoice,
-          languageCode = languageCode,
-          pitch = pitch,
-          speed = speed
-        )
-      }
-
-      if (genId != activeSpeechGenerationId || activeUtteranceId != utteranceId) {
-        return@launch
-      }
-      _synthesizingVoiceId.value = null
-
-      if (audioFile != null && playAudioFileWithMediaPlayer(audioFile, speed, genId, utteranceId, spokenText, text)) {
-        return@launch
-      }
-
-      // Fallback to distinct Android system TextToSpeech voice if cloud TTS was unreachable
-      dispatchSystemTtsOrFallback(
-        spokenText = spokenText,
-        uiReferenceText = text,
-        languageCode = languageCode,
-        pitch = pitch,
-        speed = speed,
-        targetVoice = targetVoice,
-        utteranceId = utteranceId,
-        isPreview = isPreview,
-        genId = genId
-      )
-    }
+    dispatchSystemTtsOrFallback(
+      spokenText = spokenText,
+      uiReferenceText = text,
+      languageCode = languageCode,
+      pitch = pitch,
+      speed = speed,
+      targetVoice = targetVoice,
+      utteranceId = utteranceId,
+      isPreview = isPreview,
+      genId = genId
+    )
   }
 
   private fun dispatchSystemTtsOrFallback(
@@ -819,112 +774,7 @@ class SpeechManager(private val context: Context) : TextToSpeech.OnInitListener 
     }
   }
 
-  @OptIn(com.google.firebase.ai.type.PublicPreviewAPI::class)
-  private suspend fun synthesizeOrLoadGeminiTtsAudioFile(
-    spokenText: String,
-    voice: TutorVoice,
-    languageCode: String,
-    pitch: Float,
-    speed: Float
-  ): File? {
-    return try {
-      val cacheDir = File(context.cacheDir, TTS_CACHE_DIR).apply { mkdirs() }
-      val cacheKey = buildTtsCacheKey(
-        voice = voice,
-        languageCode = languageCode,
-        normalizedText = spokenText,
-        pitch = pitch,
-        speed = speed
-      )
-      val prefix = "tts_v_${voice.id.lowercase(Locale.US)}_$cacheKey"
-      val existingWav = File(cacheDir, "$prefix.wav")
-      if (isValidCachedAudioFile(existingWav, expectWav = true)) {
-        return existingWav
-      }
-      val existingMp3 = File(cacheDir, "$prefix.mp3")
-      if (isValidCachedAudioFile(existingMp3, expectWav = false)) {
-        return existingMp3
-      }
-
-      if (testSimulateTtsFailure || System.currentTimeMillis() < cloudTtsCooldownUntilEpochMs) {
-        return null
-      }
-
-      com.example.ensureAppCheckConfiguredIfPending()
-      val config = generationConfig {
-        responseModalities = listOf(ResponseModality.AUDIO)
-        speechConfig = SpeechConfig(Voice(voice.providerVoiceId))
-      }
-      val model = Firebase.ai.generativeModel(
-        modelName = GEMINI_TTS_MODEL,
-        generationConfig = config
-      )
-      val response = withTimeoutOrNull(GEMINI_TTS_TIMEOUT_MS) {
-        model.generateContent(spokenText)
-      } ?: run {
-        cloudTtsCooldownUntilEpochMs = System.currentTimeMillis() + 30_000L
-        return null
-      }
-
-      val audioPart = response.inlineDataParts.firstOrNull { part ->
-        part.mimeType.startsWith("audio/", ignoreCase = true)
-      } ?: return null
-
-      val rawBytes = audioPart.inlineData
-      if (rawBytes.isEmpty()) return null
-
-      val mimeLower = audioPart.mimeType.lowercase(Locale.US)
-      val isRawPcm = mimeLower.contains("pcm") || mimeLower.contains("l16")
-      val isMp3 = mimeLower.contains("mpeg") || mimeLower.contains("mp3")
-      val isWav = mimeLower.contains("wav")
-
-      val targetFile = if (isMp3) File(cacheDir, "$prefix.mp3") else File(cacheDir, "$prefix.wav")
-      val partFile = File(cacheDir, "$prefix.part")
-
-      val finalBytes = when {
-        isRawPcm -> {
-          val rateMatch = Regex("""rate=(\d+)""").find(mimeLower)
-          val sampleRate = rateMatch?.groupValues?.getOrNull(1)?.toIntOrNull()?.coerceIn(8000, 48000) ?: 24000
-          encodePcmToWavBytes(rawBytes, sampleRate)
-        }
-        isWav -> {
-          if (hasRiffWaveHeader(rawBytes)) rawBytes else encodePcmToWavBytes(rawBytes, 24000)
-        }
-        isMp3 -> rawBytes
-        else -> {
-          if (hasRiffWaveHeader(rawBytes)) rawBytes else encodePcmToWavBytes(rawBytes, 24000)
-        }
-      }
-
-      if (finalBytes.size <= 44) return null
-      FileOutputStream(partFile).use { fos ->
-        fos.write(finalBytes)
-        fos.flush()
-      }
-      if (targetFile.exists()) targetFile.delete()
-      if (partFile.renameTo(targetFile) && isValidCachedAudioFile(targetFile, expectWav = !isMp3)) {
-        cloudTtsCooldownUntilEpochMs = 0L
-        targetFile
-      } else {
-        partFile.delete()
-        null
-      }
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      val msg = e.message.orEmpty()
-      if (GeminiTutorService.isProjectBillingOrQuotaDepletedError(e) ||
-        msg.contains("not found", ignoreCase = true) ||
-        msg.contains("404", ignoreCase = true) ||
-        msg.contains("PERMISSION_DENIED", ignoreCase = true) ||
-        msg.contains("UNAUTHENTICATED", ignoreCase = true)
-      ) {
-        cloudTtsCooldownUntilEpochMs = System.currentTimeMillis() + TTS_FAILURE_COOLDOWN_MS
-      }
-      Log.w("SpeechManager", "Gemini TTS synthesis failed for ${voice.id}: ${e.message}")
-      null
-    }
-  }
+  // Paid cloud TTS disabled: all voice output uses free on-device Android TextToSpeech.
 
   private fun hasRiffWaveHeader(bytes: ByteArray): Boolean {
     return bytes.size > 44 &&

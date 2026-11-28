@@ -1993,7 +1993,7 @@ fun ProfileScreen(
     PrivacyPolicyDialog(
       onDismiss = { showPrivacyPolicy = false },
       onOpenBrowser = {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_POLICY_URL))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolvePrivacyPolicyUrl(context)))
         context.startActivity(intent)
       }
     )
@@ -2003,7 +2003,7 @@ fun ProfileScreen(
     TermsOfServiceDialog(
       onDismiss = { showTermsOfService = false },
       onOpenBrowser = {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(TERMS_OF_SERVICE_URL))
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolveTermsOfServiceUrl(context)))
         context.startActivity(intent)
       }
     )

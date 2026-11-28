@@ -44,12 +44,17 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
 
     val isRobolectric = Build.FINGERPRINT.equals("robolectric", ignoreCase = true)
-    WindowCompat.setDecorFitsSystemWindows(window, false)
 
-    val mountComposeRoot: (StartupBootstrapState?) -> Unit = { preloadedState ->
+    if (isRobolectric) {
+      WindowCompat.setDecorFitsSystemWindows(window, false)
+      initialWindowSyncCompleted = true
+      com.example.ai.AiErrorHandler.startNetworkMonitoring(applicationContext)
+      rememberPendingAppCheckIntent(applicationContext, intent)
+      configureAppCheck(this, intent)
+      com.example.ai.GeminiService.initialize(applicationContext)
       setContent {
         LingoAppRoot(
-          initialBootstrapState = preloadedState,
+          initialBootstrapState = null,
           onComposeReady = {},
           speechManagerProvider = { getOrCreateSpeechManager() },
           onInitializeBilling = { onEntitlementVerified, onSubscriptionDetailsVerified ->
@@ -69,129 +74,121 @@ class MainActivity : ComponentActivity() {
           }
         )
       }
+      return
     }
 
-    if (isRobolectric) {
-      initialWindowSyncCompleted = true
-      com.example.ai.AiErrorHandler.startNetworkMonitoring(applicationContext)
-      rememberPendingAppCheckIntent(applicationContext, intent)
-      configureAppCheck(this, intent)
-      com.example.ai.GeminiService.initialize(applicationContext)
-      mountComposeRoot(null)
-    } else {
-      // Paint a bare native dark FrameLayout on the first VRI SurfaceSyncGroup transactions (#2 / #3)
-      // with zero main-thread or IO contention so WindowManager receives transaction-ready in <20ms.
-      val splashContainer = android.widget.FrameLayout(this).apply {
-        setBackgroundColor(AndroidColor.parseColor("#070B14"))
+    // Paint a bare native dark FrameLayout + lightweight VSYNC heartbeat View so every
+    // ViewRootImpl SurfaceSyncGroup (including wmsSync-VRI[MainActivity]#2 and VRI[MainActivity]#3)
+    // commits a RenderThread buffer within <16ms with zero coroutine/dispatcher/IO contention.
+    val darkBgColor = AndroidColor.parseColor("#070B14")
+    val splashContainer = android.widget.FrameLayout(this).apply {
+      setBackgroundColor(darkBgColor)
+    }
+    val syncHeartbeatView = object : android.view.View(this) {
+      private var frameTick = 0
+      override fun onDraw(canvas: android.graphics.Canvas) {
+        canvas.drawColor(darkBgColor)
+        if (!initialWindowSyncCompleted && frameTick < 90) {
+          frameTick++
+          postInvalidateOnAnimation()
+        }
       }
-      setContentView(
-        splashContainer,
-        android.view.ViewGroup.LayoutParams(
-          android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-          android.view.ViewGroup.LayoutParams.MATCH_PARENT
-        )
+    }
+    splashContainer.addView(
+      syncHeartbeatView,
+      android.widget.FrameLayout.LayoutParams(
+        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        android.view.ViewGroup.LayoutParams.MATCH_PARENT
       )
+    )
+    setContentView(
+      splashContainer,
+      android.view.ViewGroup.LayoutParams(
+        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+      )
+    )
 
-      val launchIntent = intent
-      var composeBootstrapStarted = false
+    val launchIntent = intent
+    var composeBootstrapStarted = false
 
-      val startPostSyncBootstrap = Runnable {
-        if (composeBootstrapStarted || isDestroyed || isFinishing) return@Runnable
-        composeBootstrapStarted = true
-        lifecycleScope.launch(Dispatchers.IO) {
-          // Keep the first 1450ms completely quiet so wmsSync-VRI[MainActivity]#2 and VRI[MainActivity]#3
-          // finish their 1000ms transaction-ready window with zero main-thread, RenderThread, or IO contention.
-          delay(1450L)
-          initialWindowSyncCompleted = true
-          runCatching { com.example.ai.AiErrorHandler.startNetworkMonitoring(applicationContext) }
-          runCatching { rememberPendingAppCheckIntent(applicationContext, launchIntent) }
-          val preloaded = runCatching { loadLightweightStartupBootstrap(applicationContext) }.getOrNull()
+    val startPostSyncBootstrap = Runnable {
+      if (composeBootstrapStarted || isDestroyed || isFinishing) return@Runnable
+      composeBootstrapStarted = true
+      initialWindowSyncCompleted = true
+      runCatching { splashContainer.removeView(syncHeartbeatView) }
+      runCatching { WindowCompat.setDecorFitsSystemWindows(window, false) }
+
+      lifecycleScope.launch(Dispatchers.IO) {
+        runCatching { com.example.ai.AiErrorHandler.startNetworkMonitoring(applicationContext) }
+        runCatching { rememberPendingAppCheckIntent(applicationContext, launchIntent) }
+        val preloaded = runCatching { loadLightweightStartupBootstrap(applicationContext) }.getOrNull()
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+          if (!isDestroyed && !isFinishing) {
+            attachLingoComposeRootView(
+              activity = this@MainActivity,
+              hostContainer = splashContainer,
+              bootstrapState = preloaded,
+              onComposeReady = {},
+              speechManagerProvider = { getOrCreateSpeechManager() },
+              onInitializeBilling = { onEntitlementVerified, onSubscriptionDetailsVerified ->
+                if (billingRepository == null) {
+                  try {
+                    billingRepository = BillingRepository(
+                      context = this@MainActivity,
+                      externalScope = CoroutineScope(Dispatchers.Main),
+                      onEntitlementVerified = onEntitlementVerified,
+                      onSubscriptionDetailsVerified = onSubscriptionDetailsVerified
+                    )
+                  } catch (e: Throwable) {
+                    android.util.Log.w("MainActivity", "BillingRepository init failed", e)
+                  }
+                }
+                billingRepository
+              }
+            )
+          }
+        }
+        delay(1500L)
+        configureAppCheckSafely(applicationContext, launchIntent)
+        com.example.ai.GeminiService.initialize(applicationContext)
+
+        if (launchIntent?.data != null) {
+          delay(800L)
+          runCatching {
+            com.example.data.repository.ReferralInstallAttributionStore
+              .captureIncomingIntent(applicationContext, launchIntent)
+          }
+        }
+        if (launchIntent?.extras != null) {
           kotlinx.coroutines.withContext(Dispatchers.Main) {
             if (!isDestroyed && !isFinishing) {
-              attachLingoComposeRootView(
-                activity = this@MainActivity,
-                hostContainer = splashContainer,
-                bootstrapState = preloaded,
-                onComposeReady = {},
-                speechManagerProvider = { getOrCreateSpeechManager() },
-                onInitializeBilling = { onEntitlementVerified, onSubscriptionDetailsVerified ->
-                  if (billingRepository == null) {
-                    try {
-                      billingRepository = BillingRepository(
-                        context = this@MainActivity,
-                        externalScope = CoroutineScope(Dispatchers.Main),
-                        onEntitlementVerified = onEntitlementVerified,
-                        onSubscriptionDetailsVerified = onSubscriptionDetailsVerified
-                      )
-                    } catch (e: Throwable) {
-                      android.util.Log.w("MainActivity", "BillingRepository init failed", e)
-                    }
-                  }
-                  billingRepository
-                }
-              )
+              handleIncomingCallIntent(launchIntent)
+              handleSmartNotificationIntent(launchIntent)
             }
           }
-          delay(1500L)
-          configureAppCheckSafely(applicationContext, launchIntent)
-          com.example.ai.GeminiService.initialize(applicationContext)
         }
-      }
-
-      splashContainer.post {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-          runCatching {
-            window.decorView.viewTreeObserver.registerFrameCommitCallback(startPostSyncBootstrap)
-          }.onFailure {
-            splashContainer.postOnAnimation(startPostSyncBootstrap)
-          }
-        } else {
-          splashContainer.postOnAnimation(startPostSyncBootstrap)
+        delay(1800L)
+        runCatching { coil.Coil.imageLoader(applicationContext) }
+        delay(800L)
+        try {
+          com.example.webrtc.NativeCallNotificationManager.ensureIncomingCallChannel(applicationContext)
+          com.example.webrtc.NativeCallNotificationManager.ensureActiveCallChannel(applicationContext)
+          com.example.update.LingoAppUpdateController.reconcileInstalledVersionOnStartup(applicationContext)
+        } catch (e: Exception) {
+          android.util.Log.w("MainActivity", "Call channels init warning", e)
         }
-      }
-      // Fallback safeguard after initial SurfaceSyncGroup window if frame commit callback is not invoked
-      splashContainer.postDelayed(startPostSyncBootstrap, 1200L)
-    }
-
-    if (intent?.data != null) {
-      val incomingDataIntent = intent
-      lifecycleScope.launch(Dispatchers.IO) {
-        delay(3500L)
-        com.example.data.repository.ReferralInstallAttributionStore.captureIncomingIntent(applicationContext, incomingDataIntent)
-      }
-    }
-
-    if (intent?.extras != null) {
-      lifecycleScope.launch {
-        delay(3200L)
-        handleIncomingCallIntent(intent)
-        handleSmartNotificationIntent(intent)
-      }
-    }
-
-    lifecycleScope.launch(Dispatchers.IO) {
-      delay(4800L)
-      runCatching { coil.Coil.imageLoader(applicationContext) }
-      delay(1200L)
-      try {
-        com.example.webrtc.NativeCallNotificationManager.ensureIncomingCallChannel(applicationContext)
-        com.example.webrtc.NativeCallNotificationManager.ensureActiveCallChannel(applicationContext)
-        com.example.update.LingoAppUpdateController.reconcileInstalledVersionOnStartup(applicationContext)
-      } catch (e: Exception) {
-        android.util.Log.w("MainActivity", "Call channels init warning", e)
-      }
-    }
-
-    lifecycleScope.launch(Dispatchers.Default) {
-      delay(5500L)
-      runCatching { CurriculumData.getLessonsForLanguage("es") }
-      if (!isRobolectric) {
+        runCatching { CurriculumData.getLessonsForLanguage("es") }
         runCatching {
           com.example.data.repository.InstallReferrerAttributionBridge
             .fetchAndStoreInstallReferrerIfNeeded(applicationContext)
         }
       }
     }
+
+    // Wait 1550ms using standard Android Handler before touching lifecycleScope/Dispatchers/Compose
+    // so wmsSync-VRI[MainActivity]#2 and VRI[MainActivity]#3 complete their 1000ms window cleanly.
+    splashContainer.postDelayed(startPostSyncBootstrap, 1550L)
   }
 
   override fun onResume() {
@@ -287,6 +284,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onDestroy() {
+    com.example.ads.AdService.detachActivity(this)
     super.onDestroy()
     speechManagerInstance?.release()
   }

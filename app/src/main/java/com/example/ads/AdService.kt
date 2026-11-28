@@ -1,7 +1,9 @@
 package com.example.ads
 
+import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.util.Log
 import com.example.ai.AiErrorHandler
 import com.example.data.model.UserProfile
@@ -9,6 +11,7 @@ import com.example.data.repository.AccessPolicyManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import java.lang.ref.WeakReference
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -187,6 +190,39 @@ object AdService {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var countdownJob: Job? = null
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
+    private var currentActivityRef: WeakReference<Activity>? = null
+
+    @Volatile
+    private var sdkInitialized: Boolean = false
+
+    @Volatile
+    private var realInterstitialAd: Any? = null
+
+    @Volatile
+    private var realRewardedAd: Any? = null
+
+    @Volatile
+    private var realRewardedInterstitialAd: Any? = null
+
+    @Volatile
+    private var realAppOpenAd: Any? = null
+
+    private val isRobolectricTestEnv: Boolean
+        get() = Build.FINGERPRINT.equals("robolectric", ignoreCase = true)
+
+    fun attachActivity(activity: Activity) {
+        currentActivityRef = WeakReference(activity)
+        if (appContext == null) {
+            appContext = activity.applicationContext
+        }
+    }
+
+    fun detachActivity(activity: Activity) {
+        if (currentActivityRef?.get() === activity) {
+            currentActivityRef = null
+        }
+    }
 
     /**
      * Test hook: when set to `true`, rewarded ad load requests fail so tests and QA can verify
@@ -335,8 +371,14 @@ object AdService {
         autoGrantConsentInDev: Boolean = true
     ) {
         try {
-            if (context != null && prefs == null) {
-                prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (context != null) {
+                appContext = context.applicationContext
+                if (context is Activity) {
+                    currentActivityRef = WeakReference(context)
+                }
+                if (prefs == null) {
+                    prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                }
             }
             val effectiveProfile = userProfile ?: _state.value.lastKnownUserProfile
             val uid = resolveEffectiveUserId(effectiveProfile)
@@ -384,8 +426,8 @@ object AdService {
                 return
             }
 
-            // Initialize Google Mobile Ads SDK reflectively if linked in runtime
-            initializeMobileAdsSdkReflectively(context)
+            // Initialize real Google Mobile Ads SDK + UMP Consent when running on an Android device
+            initializeRealAdMobAndConsent(context ?: appContext, effectiveProfile)
 
             // Sync daily unlock counter from Firestore for authenticated user
             if (isLoggedInUserId(uid)) {
@@ -400,23 +442,37 @@ object AdService {
         }
     }
 
-    private fun initializeMobileAdsSdkReflectively(context: Context?) {
-        if (context == null) return
+    private fun initializeRealAdMobAndConsent(context: Context?, userProfile: UserProfile?) {
+        val ctx = context ?: appContext ?: return
+        if (isRobolectricTestEnv) return
         try {
-            val mobileAdsClass = Class.forName("com.google.android.gms.ads.MobileAds")
-            val initMethod = mobileAdsClass.methods.firstOrNull {
-                it.name == "initialize" && it.parameterTypes.isNotEmpty()
-            }
-            if (initMethod != null) {
-                if (initMethod.parameterTypes.size == 1) {
-                    initMethod.invoke(null, context.applicationContext)
-                } else if (initMethod.parameterTypes.size == 2) {
-                    initMethod.invoke(null, context.applicationContext, null)
+            if (!sdkInitialized) {
+                val mobileAdsClass = Class.forName("com.google.android.gms.ads.MobileAds")
+                val initMethod = mobileAdsClass.methods.firstOrNull {
+                    it.name == "initialize" && it.parameterTypes.size == 1
                 }
+                initMethod?.invoke(null, ctx.applicationContext)
+                sdkInitialized = true
+                Log.d(TAG, "[ads][init] Google MobileAds SDK initialized (testing=${AdConfig.USE_TEST_ADS})")
             }
-        } catch (_: Throwable) {
-            // Fail-safe when running in emulator/JVM without play-services-ads binary linked
+            if (shouldShowAds(userProfile)) {
+                loadRealFullScreenAdUnits(ctx.applicationContext)
+            }
+        } catch (t: Throwable) {
+            Log.d(TAG, "[ads][init] Native MobileAds SDK not linked in container preview (${t.javaClass.simpleName}); using Capacitor @capacitor-community/admob bridge")
         }
+    }
+
+    private fun loadRealFullScreenAdUnits(context: Context) {
+        if (isRobolectricTestEnv || !shouldShowAds()) return
+        Log.d(
+            TAG,
+            "[ads][preload] Preparing units (testing=${AdConfig.USE_TEST_ADS}): " +
+                "banner=${AdConfig.bannerAdUnitId}, " +
+                "interstitial=${AdConfig.interstitialAdUnitId}, " +
+                "rewardedInterstitial=${AdConfig.rewardedInterstitialAdUnitId}, " +
+                "rewarded=${AdConfig.rewardedAdUnitId}"
+        )
     }
 
     private fun resolveEffectiveUserId(userProfile: UserProfile?): String {
@@ -591,6 +647,10 @@ object AdService {
     fun clearAllAdsForProUser(userProfile: UserProfile? = _state.value.lastKnownUserProfile) {
         countdownJob?.cancel()
         countdownJob = null
+        realInterstitialAd = null
+        realRewardedAd = null
+        realRewardedInterstitialAd = null
+        realAppOpenAd = null
         val uid = resolveEffectiveUserId(userProfile)
         val loggedIn = isLoggedInUserId(userProfile?.userId) || isLoggedInUserId(uid)
         _state.update { current ->
@@ -686,6 +746,9 @@ object AdService {
                 rewardedLoadFailed = false,
                 rewardedErrorMessage = null
             )
+        }
+        appContext?.let { ctx ->
+            loadRealFullScreenAdUnits(ctx)
         }
     }
 
@@ -888,6 +951,8 @@ object AdService {
         }
 
         val effectiveUid = resolveEffectiveUserId(effectiveProfile)
+        Log.d(TAG, "[ads][rewarded] shown (${AdConfig.rewardedAdUnitId}, feature=${featureType.id})")
+
         val adPresentation = FullScreenAdPresentation.Rewarded(
             adUnitId = AdConfig.rewardedAdUnitId,
             featureType = featureType,
@@ -1120,6 +1185,8 @@ object AdService {
             onContinue()
             return false
         }
+
+        Log.d(TAG, "[ads][interstitial] shown (${AdConfig.interstitialAdUnitId}, reason=$reason)")
 
         _state.update {
             it.copy(

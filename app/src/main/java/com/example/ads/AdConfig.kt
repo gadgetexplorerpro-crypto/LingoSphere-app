@@ -4,9 +4,10 @@ package com.example.ads
  * Centralized Google AdMob configuration for LingoSphere.
  *
  * Mirrors `/src/config/ads.ts`.
- * - Default [USE_TEST_ADS] is `true` for development and verification.
- * - Switch [USE_TEST_ADS] to `false` (and update `com.google.android.gms.ads.APPLICATION_ID`
- *   in `AndroidManifest.xml`) before building a production release APK/AAB.
+ * - Debug and unit-test builds automatically use Google Test Ad IDs (`BuildConfig.DEBUG == true`)
+ *   to protect your AdMob account from invalid test clicks.
+ * - Release APK/AAB builds uploaded to Google Play automatically switch to LingoSphere Production
+ *   AdMob IDs (`pub-8471293855339658`) so live ad requests verify `app-ads.txt`.
  */
 object AdConfig {
 
@@ -15,7 +16,7 @@ object AdConfig {
      * LingoSphere Production AdMob IDs (`false`) are used across the entire app.
      */
     @Volatile
-    var USE_TEST_ADS: Boolean = true
+    var USE_TEST_ADS: Boolean = com.example.BuildConfig.DEBUG
 
     // =========================================================================
     // Production AdMob IDs (LingoSphere)

@@ -1417,19 +1417,6 @@ fun AuthenticatedMainContent(
           speechManager = speechManager,
           onFinishLesson = { score, xp ->
             viewModel.finishActiveLesson(score, xp)
-            val allLangLessons = CurriculumData.getLessonsForLanguage(currentLesson.targetLanguageCode)
-            val curIdx = allLangLessons.indexOfFirst { it.id == currentLesson.id }
-            val upcoming = allLangLessons.getOrNull(curIdx + 1)
-            if (upcoming != null && userProfile.isEntitlementVerified) {
-              com.example.ai.GeminiService.pregenerateNextLessonInBackground(
-                userContext = com.example.ai.GeminiUserContext(
-                  targetLanguageCode = currentLesson.targetLanguageCode,
-                  nativeLanguageCode = userProfile.nativeLanguageCode,
-                  cefrLevel = upcoming.cefrLevel
-                ),
-                nextLesson = upcoming
-              )
-            }
           },
           onNavigateBack = { viewModel.dismissLesson() },
           initialExerciseIndex = savedCheckpoint?.currentExerciseIndex ?: 0,

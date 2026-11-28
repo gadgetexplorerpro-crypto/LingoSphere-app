@@ -123,10 +123,35 @@ import com.example.ui.theme.LingoElectricBlue
 import com.example.ui.theme.LingoEmerald
 
 // Public URLs required for Google Play Console Store Listing & Data Safety Compliance
-const val BASE_COMPLIANCE_URL = "https://ais-pre-smnebhnagujwa3llo3lj4b-861509315491.asia-east1.run.app"
+const val BASE_COMPLIANCE_URL = "https://gadgetexplorerpro-crypto.github.io"
 const val PRIVACY_POLICY_URL = "$BASE_COMPLIANCE_URL/privacy-policy.html"
 const val TERMS_OF_SERVICE_URL = "$BASE_COMPLIANCE_URL/terms.html"
 const val DATA_DELETION_URL = "$BASE_COMPLIANCE_URL/delete-account.html"
+
+fun resolveComplianceBaseUrl(context: Context): String {
+  val configured = runCatching {
+    context.getString(R.string.developer_website_base_url).trim().trimEnd('/')
+  }.getOrDefault("")
+  return if (
+    configured.startsWith("https://") &&
+    !configured.contains('<') &&
+    !configured.contains('>') &&
+    !configured.contains("YOUR_GITHUB_USERNAME", ignoreCase = true)
+  ) {
+    configured
+  } else {
+    BASE_COMPLIANCE_URL
+  }
+}
+
+fun resolvePrivacyPolicyUrl(context: Context): String =
+  "${resolveComplianceBaseUrl(context)}/privacy-policy.html"
+
+fun resolveTermsOfServiceUrl(context: Context): String =
+  "${resolveComplianceBaseUrl(context)}/terms.html"
+
+fun resolveDataDeletionUrl(context: Context): String =
+  "${resolveComplianceBaseUrl(context)}/delete-account.html"
 
 private enum class AuthSubPage {
   LOGIN,
@@ -286,7 +311,7 @@ fun AuthScreen(
       PrivacyPolicyFullScreen(
         onBack = { currentSubPage = AuthSubPage.LOGIN },
         onOpenDeleteAccount = { showDeleteDataDialog = true },
-        onOpenBrowser = { openUrlInBrowser(PRIVACY_POLICY_URL) }
+        onOpenBrowser = { openUrlInBrowser(resolvePrivacyPolicyUrl(context)) }
       )
     }
 
@@ -294,7 +319,7 @@ fun AuthScreen(
       BackHandler { currentSubPage = AuthSubPage.LOGIN }
       TermsOfServiceFullScreen(
         onBack = { currentSubPage = AuthSubPage.LOGIN },
-        onOpenBrowser = { openUrlInBrowser(TERMS_OF_SERVICE_URL) }
+        onOpenBrowser = { openUrlInBrowser(resolveTermsOfServiceUrl(context)) }
       )
     }
 
@@ -2130,13 +2155,15 @@ fun DeleteAccountUrlDialog(
 
         Spacer(modifier = Modifier.height(6.dp))
 
+        val dataDeletionUrl = remember(context) { resolveDataDeletionUrl(context) }
+
         Card(
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
           shape = RoundedCornerShape(10.dp),
           modifier = Modifier.fillMaxWidth()
         ) {
           Text(
-            text = DATA_DELETION_URL,
+            text = dataDeletionUrl,
             style = MaterialTheme.typography.labelSmall,
             color = LingoCyan,
             fontWeight = FontWeight.Bold,
@@ -2153,7 +2180,7 @@ fun DeleteAccountUrlDialog(
           OutlinedButton(
             onClick = {
               val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-              val clip = ClipData.newPlainText("Delete Account URL", DATA_DELETION_URL)
+              val clip = ClipData.newPlainText("Delete Account URL", dataDeletionUrl)
               clipboard.setPrimaryClip(clip)
               Toast.makeText(context, "Delete Account URL copied", Toast.LENGTH_SHORT).show()
             },
@@ -2166,7 +2193,7 @@ fun DeleteAccountUrlDialog(
 
           OutlinedButton(
             onClick = {
-              val intent = Intent(Intent.ACTION_VIEW, Uri.parse(DATA_DELETION_URL))
+              val intent = Intent(Intent.ACTION_VIEW, Uri.parse(dataDeletionUrl))
               context.startActivity(intent)
             },
             modifier = Modifier.weight(1f)

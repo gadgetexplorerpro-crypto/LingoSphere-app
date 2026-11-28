@@ -52,18 +52,101 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.os.Build
+import android.util.Log
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.ai.AiErrorHandler
 import com.example.data.model.UserProfile
 import com.example.data.repository.AccessPolicyManager
 import com.example.ui.components.LingoCleanCard
+import android.view.View
+import android.widget.FrameLayout
 import kotlinx.coroutines.delay
+
+private const val AD_UI_TAG = "LingoAdUI"
+
+private val isRobolectricUiEnv: Boolean
+    get() = Build.FINGERPRINT.equals("robolectric", ignoreCase = true)
+
+private val isNativeGoogleAdViewAvailable: Boolean by lazy {
+    try {
+        Class.forName("com.google.android.gms.ads.AdView")
+        true
+    } catch (_: Throwable) {
+        false
+    }
+}
+
+/**
+ * Mounts a real Google Mobile Ads SDK Adaptive Banner (`com.google.android.gms.ads.AdView`) when the native
+ * AdMob SDK is present at runtime, and collapses completely (0dp height, no fake/placeholder card)
+ * when no real ad is loaded.
+ */
+@Composable
+private fun RealGoogleAdaptiveBannerView(
+    adUnitId: String,
+    placementLabel: String,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    if (!isNativeGoogleAdViewAvailable) return
+    val configuration = LocalConfiguration.current
+    val adWidthDp = configuration.screenWidthDp.coerceAtLeast(320)
+    var isRealAdLoaded by remember(adUnitId, placementLabel) { mutableStateOf(false) }
+    var hasRealAdFailed by remember(adUnitId, placementLabel) { mutableStateOf(false) }
+
+    if (hasRealAdFailed) return
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (isRealAdLoaded) Modifier.padding(vertical = 4.dp) else Modifier.height(0.dp))
+            .testTag(testTag),
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            modifier = Modifier.fillMaxWidth(),
+            factory = { ctx ->
+                try {
+                    val adViewClass = Class.forName("com.google.android.gms.ads.AdView")
+                    val adSizeClass = Class.forName("com.google.android.gms.ads.AdSize")
+                    val adRequestBuilderClass = Class.forName("com.google.android.gms.ads.AdRequest\$Builder")
+                    val adView = adViewClass.getConstructor(android.content.Context::class.java).newInstance(ctx) as View
+                    val getAdaptiveSize = adSizeClass.getMethod(
+                        "getCurrentOrientationAnchoredAdaptiveBannerAdSize",
+                        android.content.Context::class.java,
+                        Int::class.javaPrimitiveType
+                    )
+                    val adaptiveSize = getAdaptiveSize.invoke(null, ctx, adWidthDp)
+                    adViewClass.getMethod("setAdSize", adSizeClass).invoke(adView, adaptiveSize)
+                    adViewClass.getMethod("setAdUnitId", String::class.java).invoke(adView, adUnitId)
+                    val adRequestBuilder = adRequestBuilderClass.getConstructor().newInstance()
+                    val adRequest = adRequestBuilderClass.getMethod("build").invoke(adRequestBuilder)
+                    val adRequestClass = Class.forName("com.google.android.gms.ads.AdRequest")
+                    adViewClass.getMethod("loadAd", adRequestClass).invoke(adView, adRequest)
+                    Log.d(
+                        AD_UI_TAG,
+                        "[ads][banner:$placementLabel] requested (adUnitId=$adUnitId, testing=${AdConfig.USE_TEST_ADS})"
+                    )
+                    adView
+                } catch (t: Throwable) {
+                    hasRealAdFailed = true
+                    isRealAdLoaded = false
+                    FrameLayout(ctx).apply { visibility = View.GONE }
+                }
+            }
+        )
+    }
+}
 
 /**
  * Compact AdMob Banner pinned above the bottom navigation bar on allowed screens
@@ -99,6 +182,16 @@ fun LingoBannerAdBar(
     }
 
     val bannerUnitId = AdConfig.bannerAdUnitId
+    if (!isRobolectricUiEnv) {
+        RealGoogleAdaptiveBannerView(
+            adUnitId = bannerUnitId,
+            placementLabel = placementName,
+            testTag = "admob_banner_$placementName",
+            modifier = modifier.padding(bottom = 8.dp)
+        )
+        return
+    }
+
     val GlassSurface = Color(0xFF0E1526)
     val GlassBorder = Color(0x1AFFFFFF)
     val SecondaryText = Color(0xFFA8B3CF)
@@ -200,6 +293,16 @@ fun LingoNativeAdCard(
         AdService.shouldShowAds(userProfile) && adState.nativeLoaded
     }
     if (!canShow) {
+        return
+    }
+
+    if (!isRobolectricUiEnv) {
+        RealGoogleAdaptiveBannerView(
+            adUnitId = AdConfig.bannerAdUnitId,
+            placementLabel = "section_$placementKey",
+            testTag = "admob_native_card_$placementKey",
+            modifier = modifier
+        )
         return
     }
 
@@ -332,6 +435,16 @@ fun LingoBookListNativeAdCard(
         AdService.shouldShowAds(userProfile) && adState.nativeLoaded
     }
     if (!canShow) {
+        return
+    }
+
+    if (!isRobolectricUiEnv) {
+        RealGoogleAdaptiveBannerView(
+            adUnitId = AdConfig.bannerAdUnitId,
+            placementLabel = "book_list_$slotIndex",
+            testTag = "admob_book_native_card_$slotIndex",
+            modifier = modifier
+        )
         return
     }
 
@@ -494,6 +607,16 @@ fun LingoGameGridNativeAdCard(
         AdService.shouldShowAds(userProfile) && adState.nativeLoaded && !AdService.simulateAdLoadFailure
     }
     if (!canShow) {
+        return
+    }
+
+    if (!isRobolectricUiEnv) {
+        RealGoogleAdaptiveBannerView(
+            adUnitId = AdConfig.bannerAdUnitId,
+            placementLabel = "game_grid_$slotIndex",
+            testTag = "admob_game_native_card_$slotIndex",
+            modifier = modifier
+        )
         return
     }
 

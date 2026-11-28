@@ -18,7 +18,8 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
 class LingoApplication : Application(), ImageLoaderFactory {
-  private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  private val appScope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+  private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
   override fun newImageLoader(): ImageLoader {
     return ImageLoader.Builder(this)
@@ -53,26 +54,28 @@ class LingoApplication : Application(), ImageLoaderFactory {
 
   override fun onCreate() {
     super.onCreate()
-    try {
-      appScope.launch {
-        try {
-          // Defer non-critical background warm-up until MainActivity completes initial SurfaceSyncGroup transactions
-          delay(3800L)
-          runCatching { com.example.ai.GeminiService.initialize(this@LingoApplication) }
-          delay(2100L)
-          if (FirebaseApp.getApps(this@LingoApplication).isNotEmpty()) {
-            PresenceManager.initialize(this@LingoApplication)
+    // Defer all coroutine/dispatcher classloading and background warm-up until well after
+    // MainActivity completes its initial 1000ms SurfaceSyncGroup transactions.
+    mainHandler.postDelayed({
+      try {
+        appScope.launch {
+          try {
+            runCatching { com.example.ai.GeminiService.initialize(this@LingoApplication) }
+            delay(2100L)
+            if (FirebaseApp.getApps(this@LingoApplication).isNotEmpty()) {
+              PresenceManager.initialize(this@LingoApplication)
+            }
+            delay(600L)
+            SmartNotificationManager.ensureChannelsCreated(this@LingoApplication)
+            SmartNotificationScheduler.scheduleDailyLearningNotifications(this@LingoApplication)
+          } catch (e: Exception) {
+            Log.w("LingoApplication", "Background init warning", e)
           }
-          delay(600L)
-          SmartNotificationManager.ensureChannelsCreated(this@LingoApplication)
-          SmartNotificationScheduler.scheduleDailyLearningNotifications(this@LingoApplication)
-        } catch (e: Exception) {
-          Log.w("LingoApplication", "Background init warning", e)
         }
+      } catch (e: Exception) {
+        Log.e("LingoApplication", "Error during initialization", e)
       }
-    } catch (e: Exception) {
-      Log.e("LingoApplication", "Error during initialization", e)
-    }
+    }, 4500L)
   }
 }
 

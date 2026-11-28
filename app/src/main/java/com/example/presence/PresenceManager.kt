@@ -154,7 +154,7 @@ object PresenceManager {
 
     registerActivityLifecycle(application)
     startPresenceTicker()
-    startHeartbeatLoop()
+    // Continuous 25s RTDB heartbeat loop disabled so background writes never consume cloud database quota.
 
     scope.launch {
       try {
@@ -459,35 +459,7 @@ object PresenceManager {
       }
       connectedRef.addValueEventListener(connListener)
       rtdbConnectedListener = connListener
-
-      val allListener = object : ValueEventListener {
-        override fun onDataChange(snapshot: DataSnapshot) {
-          val parsed = mutableMapOf<String, RtdbPresenceRecord>()
-          for (child in snapshot.children) {
-            val childUid = child.key ?: continue
-            val state = child.child("state").getValue(String::class.java) ?: "offline"
-            val isOnline = child.child("isOnline").getValue(Boolean::class.java) ?: false
-            val showLastSeen = child.child("showLastSeen").getValue(Boolean::class.java) ?: true
-            val lastSeen = child.child("lastSeenEpochMs").getValue(Long::class.java) ?: 0L
-            val lastHb = child.child("lastHeartbeatEpochMs").getValue(Long::class.java) ?: lastSeen
-            parsed[childUid] = RtdbPresenceRecord(
-              userId = childUid,
-              state = state,
-              isOnline = isOnline,
-              showLastSeen = showLastSeen,
-              lastSeenEpochMs = lastSeen,
-              lastHeartbeatEpochMs = lastHb
-            )
-          }
-          _rtdbPresenceMap.value = parsed
-        }
-
-        override fun onCancelled(error: DatabaseError) {
-          Log.d(TAG, "RTDB status listener cancelled: ${error.message}")
-        }
-      }
-      allStatusRef.addValueEventListener(allListener)
-      rtdbAllStatusListener = allListener
+      // Global /status full-tree listener intentionally omitted so clients never stream all users' RTDB changes.
     } catch (e: Exception) {
       Log.d(TAG, "RTDB presence setup unavailable in this environment: ${e.message}")
     }
@@ -516,16 +488,9 @@ object PresenceManager {
   }
 
   private fun startHeartbeatLoop() {
+    // Transition-only presence: continuous 25s heartbeat polling is disabled to keep cloud usage $0.
     heartbeatJob?.cancel()
-    heartbeatJob = scope.launch {
-      while (isActive) {
-        delay(HEARTBEAT_INTERVAL_MS)
-        val status = _localStatus.value
-        if (status.isAppInForeground && status.isNetworkConnected) {
-          recalculateAndPublishPresence(reason = "foreground_heartbeat")
-        }
-      }
-    }
+    heartbeatJob = null
   }
 
   fun recalculateAndPublishPresence(reason: String = "manual", forceOffline: Boolean = false) {
