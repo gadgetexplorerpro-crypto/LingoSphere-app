@@ -1,8 +1,9 @@
 <resources>
     <string name="app_name">LingoSphere</string>
     <!--
-        Official Developer Website root URL (no trailing slash) for Google Play & AdMob app-ads.txt.
+        LingoSphere's dedicated GitHub Pages legal portal base URL (no trailing slash).
+        Shared AdMob app-ads.txt lives at the root domain: https://gadgetexplorerpro-crypto.github.io/app-ads.txt
         All in-app Privacy Policy, Terms of Service, and Delete Account links read from this single URL.
     -->
-    <string name="developer_website_base_url" translatable="false">https://gadgetexplorerpro-crypto.github.io</string>
+    <string name="developer_website_base_url" translatable="false">https://gadgetexplorerpro-crypto.github.io/LingoSphere-app</string>
 </resources>

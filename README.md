@@ -9,45 +9,44 @@ LingoSphere is an Android language learning application built with Kotlin, Jetpa
 
 ---
 
-## ✅ Exact URLs for Google Play Console & AdMob `app-ads.txt`
+## ✅ Multi-App Setup: One Shared `app-ads.txt` + Separate Repo Per App
 
-Google AdMob **only crawls `app-ads.txt` at the root of your Developer Website** (`https://gadgetexplorerpro-crypto.github.io/app-ads.txt`). A project repository URL like `https://gadgetexplorerpro-crypto.github.io/LingoSphere-app` will **not** verify `app-ads.txt` unless the root repo `gadgetexplorerpro-crypto.github.io` exists.
+Because all of your apps share the **same Google AdMob account (`pub-8471293855339658`)**, you only ever need **one** root `app-ads.txt` file for **all of your apps**, while each app hosts its own Privacy Policy and Delete Account pages in its own GitHub repository.
 
-### Step 1 — Create Your Free GitHub Pages Root Repository
-1. On your **`gadgetexplorerpro-crypto`** GitHub account, create a **Public** repository named **exact match**:  
+### Quick Copy-Paste Table (LingoSphere vs. Your Other Apps)
+
+| Google Play Console Field | LingoSphere | Any Other App (`<OtherAppRepo>`) |
+| :--- | :--- | :--- |
+| **Developer Website** *(Store settings → Contact details → Website)* | `https://gadgetexplorerpro-crypto.github.io` *(SAME)* | `https://gadgetexplorerpro-crypto.github.io` *(SAME)* |
+| **AdMob `app-ads.txt`** *(crawled automatically by AdMob)* | `https://gadgetexplorerpro-crypto.github.io/app-ads.txt` *(SAME)* | `https://gadgetexplorerpro-crypto.github.io/app-ads.txt` *(SAME)* |
+| **Privacy Policy URL** *(App content → Privacy policy)* | `https://gadgetexplorerpro-crypto.github.io/LingoSphere-app/privacy-policy.html` | `https://gadgetexplorerpro-crypto.github.io/<OtherAppRepo>/privacy-policy.html` |
+| **Delete Account URL** *(Data safety → Delete account URL)* | `https://gadgetexplorerpro-crypto.github.io/LingoSphere-app/delete-account.html` | `https://gadgetexplorerpro-crypto.github.io/<OtherAppRepo>/delete-account.html` |
+| **Terms of Service URL** | `https://gadgetexplorerpro-crypto.github.io/LingoSphere-app/terms.html` | `https://gadgetexplorerpro-crypto.github.io/<OtherAppRepo>/terms.html` |
+
+---
+
+### Step 1 — One-Time Root Repo (Covers ALL Your Apps Forever)
+1. On your **`gadgetexplorerpro-crypto`** GitHub account, create **one** Public repository named **exact match**:  
    `gadgetexplorerpro-crypto.github.io`
-2. Upload these **6 files** directly to the root of `gadgetexplorerpro-crypto.github.io` (all ready in this project root and in `/docs/`):
-   - `app-ads.txt` (contains `google.com, pub-8471293855339658, DIRECT, f08c47fec0942fa0`)
-   - `.nojekyll`
-   - `index.html`
-   - `privacy-policy.html`
-   - `terms.html`
-   - `delete-account.html`
-3. In `gadgetexplorerpro-crypto.github.io`, go to **Settings → Pages → Source: Deploy from a branch → Branch: `main` / folder: `/ (root)` → Save**.
-4. Wait 1–2 minutes and open `https://gadgetexplorerpro-crypto.github.io/app-ads.txt` in your browser to confirm it displays:
-   ```text
-   google.com, pub-8471293855339658, DIRECT, f08c47fec0942fa0
-   ```
+2. Upload just these **2 required files** to its root (plus an optional simple `index.html` listing your apps):
+   - `app-ads.txt` containing:
+     ```text
+     google.com, pub-8471293855339658, DIRECT, f08c47fec0942fa0
+     ```
+   - `.nojekyll` (empty file)
+3. Enable **Settings → Pages → Source: Deploy from a branch → Branch: `main` / folder: `/ (root)` → Save**.
+4. Open `https://gadgetexplorerpro-crypto.github.io/app-ads.txt` in your browser to verify the line appears. You never have to touch this repo again when adding new apps on the same AdMob account.
 
-### Step 2 — Paste These Exact URLs in Google Play Console
-In **Google Play Console → LingoSphere**:
-- **Developer Website (Store settings → Contact details → Website):**  
-  `https://gadgetexplorerpro-crypto.github.io`
-- **Privacy Policy (App content → Privacy policy):**  
-  `https://gadgetexplorerpro-crypto.github.io/privacy-policy.html`
-- **Delete Account & Data URL (App content → Data safety → Delete account URL):**  
-  `https://gadgetexplorerpro-crypto.github.io/delete-account.html`
-- **Terms of Service (also linked inside the app):**  
-  `https://gadgetexplorerpro-crypto.github.io/terms.html`
-- **AdMob `app-ads.txt` (crawled automatically by Google AdMob):**  
-  `https://gadgetexplorerpro-crypto.github.io/app-ads.txt`
+### Step 2 — LingoSphere Repo Pages (`LingoSphere-app`)
+1. Push your changes from AI Studio to `gadgetexplorerpro-crypto/LingoSphere-app`.
+2. In `gadgetexplorerpro-crypto/LingoSphere-app`, enable **Settings → Pages → Source: Deploy from a branch → Branch: `main` / folder: `/docs` → Save**.
+3. LingoSphere's Privacy Policy, Terms of Service, and Delete Account pages are automatically live under `https://gadgetexplorerpro-crypto.github.io/LingoSphere-app/...` — matching all in-app legal links inside LingoSphere.
 
-### Step 3 — Publish a Release Build to Send Live AdMob Requests
+### Step 3 — Publish a Release Build for Live AdMob Requests
 - `AdConfig.USE_TEST_ADS` automatically follows `BuildConfig.DEBUG`:
   - **Debug builds** use Google Test Ad IDs (`true`).
   - **Signed Release AAB/APK builds** uploaded to Google Play automatically use your production AdMob IDs (`pub-8471293855339658`).
-- All in-app Privacy Policy, Terms of Service, and Delete Account links already point to `https://gadgetexplorerpro-crypto.github.io/...`.
-- Once your live release build sends real ad requests, AdMob verifies `app-ads.txt` within **24 hours to 7 days**.
+- Once your live Play Store release sends real ad requests and every app's Developer Website is set to `https://gadgetexplorerpro-crypto.github.io`, AdMob verifies `app-ads.txt` within **24 hours to 7 days**.
 
 ---
 
@@ -55,10 +54,9 @@ In **Google Play Console → LingoSphere**:
 
 | File Path | Purpose |
 | :--- | :--- |
-| [`/app-ads.txt`](./app-ads.txt) | Root IAB Tech Lab `app-ads.txt` for AdMob (`pub-8471293855339658`) |
-| [`/index.html`](./index.html) | Official Developer Website landing page |
-| [`/privacy-policy.html`](./privacy-policy.html) | Play Store & AdMob Privacy Policy |
-| [`/terms.html`](./terms.html) | Terms of Service |
-| [`/delete-account.html`](./delete-account.html) | Account & Data Deletion Web Portal |
-| [`/.nojekyll`](./.nojekyll) | Ensures GitHub Pages serves static files directly |
-| `/docs/*` & `/public/*` | Synchronized copies of the root HTML & `app-ads.txt` files |
+| [`/app-ads.txt`](./app-ads.txt) | Copy this single file to your root `gadgetexplorerpro-crypto.github.io` repo |
+| [`/.nojekyll`](./.nojekyll) | Copy to root repo so GitHub Pages serves static files directly |
+| [`/docs/index.html`](./docs/index.html) | LingoSphere GitHub Pages Landing Page (`/LingoSphere-app/`) |
+| [`/docs/privacy-policy.html`](./docs/privacy-policy.html) | LingoSphere Play Store & AdMob Privacy Policy |
+| [`/docs/terms.html`](./docs/terms.html) | LingoSphere Terms of Service |
+| [`/docs/delete-account.html`](./docs/delete-account.html) | LingoSphere Account & Data Deletion Web Portal |

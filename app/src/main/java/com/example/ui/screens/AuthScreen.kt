@@ -123,7 +123,7 @@ import com.example.ui.theme.LingoElectricBlue
 import com.example.ui.theme.LingoEmerald
 
 // Public URLs required for Google Play Console Store Listing & Data Safety Compliance
-const val BASE_COMPLIANCE_URL = "https://gadgetexplorerpro-crypto.github.io"
+const val BASE_COMPLIANCE_URL = "https://gadgetexplorerpro-crypto.github.io/LingoSphere-app"
 const val PRIVACY_POLICY_URL = "$BASE_COMPLIANCE_URL/privacy-policy.html"
 const val TERMS_OF_SERVICE_URL = "$BASE_COMPLIANCE_URL/terms.html"
 const val DATA_DELETION_URL = "$BASE_COMPLIANCE_URL/delete-account.html"
